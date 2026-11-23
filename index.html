@@ -809,7 +809,13 @@
             <span class="text-xs font-bold text-[#1d1d1f]">학원 강의 시간표 캡처 인식</span>
             <button type="button" id="btnSampleTimetable" class="text-[11px] font-semibold text-[#007aff] hover:underline">시간표 샘플 체험</button>
           </div>
-          <input id="ttTeacherFilter" type="text" placeholder="원하는 강사명만 추출 (예: 강경태, 정정운 / 비워두면 전체)" class="w-full px-3 py-2 rounded-xl bg-white text-xs font-medium text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#007aff]" />
+          <div class="space-y-1.5">
+            <div class="flex gap-1.5">
+              <input id="ttTeacherFilter" type="text" placeholder="선택 강사명 (예: 강경태, 이훈엽 / 강사명 없는 단일강의는 자동 포함)" class="flex-1 min-w-0 px-3 py-2 rounded-xl bg-white text-xs font-medium text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#007aff]" />
+              <button type="button" id="btnReextractTimetable" class="hidden px-2.5 py-2 rounded-xl bg-[#007aff]/10 hover:bg-[#007aff]/20 text-[11px] font-bold text-[#007aff] shrink-0 transition">다시 추출</button>
+            </div>
+            <input id="ttExcludeFilter" type="text" placeholder="제외할 과목·키워드 (예: 행정소송법, 상법)" class="w-full px-3 py-1.5 rounded-xl bg-white text-xs font-medium text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#007aff]" />
+          </div>
           <label for="timetableFileInput" class="block rounded-xl bg-white hover:bg-black/[0.02] p-3 text-center cursor-pointer border border-dashed border-black/15 transition">
             <input id="timetableFileInput" type="file" accept="image/*" class="hidden" />
             <p class="text-xs font-semibold text-[#1d1d1f]">학원 시간표 사진 올리기</p>
@@ -1461,72 +1467,137 @@
       }
     }
 
+    function normalizeYptDate(rawDate) {
+      if (!rawDate) return null;
+      const str = String(rawDate).trim();
+      let m = str.match(/(\d{4})[.\-/년\s]+(\d{1,2})[.\-/월\s]+(\d{1,2})/);
+      if (m) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+      m = str.match(/(\d{1,2})[.\-/월\s]+(\d{1,2})/);
+      if (m) {
+        const y = new Date().getFullYear();
+        return `${y}-${String(m[1]).padStart(2,'0')}-${String(m[2]).padStart(2,'0')}`;
+      }
+      return null;
+    }
+
     async function callRealGeminiYeolpumta(dataUrl) {
       const apiKey = (state.geminiApiKey || '').trim();
       if (!apiKey) return null;
       try {
         const [meta, b64] = dataUrl.split(',');
         const mime = (meta.match(/data:(.*?);/) || [])[1] || 'image/jpeg';
-        const prompt = `이 이미지는 열품타(열정품은타이머) 일간 공부 기록 스크린샷입니다. 상단 중앙에 적힌 날짜(예: '11. 20 (금)' 또는 '11월 23일' 등, 맨 위 아이패드 상태바 시각이 아니라 주황색 헤더 안의 공부 날짜)를 찾아 반드시 YYYY-MM-DD 형식으로 변환하세요(연도가 없으면 ${new Date().getFullYear()}년 기준). 또한 시간이 0:00:00인 과목은 제외하고, 실제 공부한 과목명과 분 단위 정수 시간만 JSON으로 반환하세요. 형식: {"study_date":"2026-11-20","items":[{"subject":"세법","duration_minutes":210}]}`;
+        const curYear = new Date().getFullYear();
+        const prompt = `이 이미지는 열품타(열정품은타이머) 일간 공부 기록 스크린샷입니다.
+
+중요한 날짜 규칙:
+- 이미지 맨 꼭대기의 iPad/iPhone 시스템 상태바(시계, 요일, 배터리 옆에 있는 날짜)는 절대 읽지 마세요!
+- 반드시 열품타 앱 화면 내부의 공부 날짜 바(보통 상단 좌우 화살표 < > 사이에 적힌 '11. 20 (금)', '11월 23일 (월)', '2026.11.20' 등)만 읽어서 YYYY-MM-DD 형식으로 변환하세요. 연도가 없으면 ${curYear}년 기준입니다.
+- 시간이 0:00:00인 과목은 제외하고, 실제 공부한 과목명과 분 단위 정수 시간만 추출하세요.
+
+응답은 오직 JSON 객체만 출력하세요:
+{"raw_date_text":"11. 20 (금)","study_date":"2026-11-20","items":[{"subject":"세법","duration_minutes":210}]}`;
+
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: b64 } }] }],
-            generationConfig: { response_mime_type: 'application/json' }
+            generationConfig: { response_mime_type: 'application/json', temperature: 0.1 }
           })
         });
         if (!res.ok) throw new Error('Vision Error');
         const data = await res.json();
-        const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
+        let rawText = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '{}';
+        rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+        const parsed = JSON.parse(rawText || '{}');
         if (!Array.isArray(parsed.items) || parsed.items.length === 0) return null;
+        const normDate = normalizeYptDate(parsed.study_date) || normalizeYptDate(parsed.raw_date_text) || TODAY;
         const mapped = parsed.items.map(it => {
           const matchedSub = getAllSubjects().find(sub => it.subject && (sub.name.includes(it.subject) || it.subject.includes(sub.name))) || getAllSubjects()[0];
           return { subjectId: matchedSub.id, durationMinutes: Number(it.duration_minutes) || 30, content: `${it.subject} (열품타 자동 인식)` };
         });
-        return { date: parsed.study_date || TODAY, items: mapped };
+        return { date: normDate, rawDateText: parsed.raw_date_text || normDate, items: mapped };
       } catch (err) {
         return null;
       }
     }
 
+    let lastTimetableDataUrl = null;
 
     async function callRealGeminiTimetable(dataUrl) {
       const apiKey = (state.geminiApiKey || '').trim();
-      if (!apiKey) return null;
+      if (!apiKey) return { ok: false, reason: 'no_key', items: [] };
       try {
         const [meta, b64] = dataUrl.split(',');
         const mime = (meta.match(/data:(.*?);/) || [])[1] || 'image/jpeg';
-        const prompt = `이 이미지는 학원 강의 시간표(월간 달력 또는 주간 일정표) 스크린샷입니다.
-달력에 적힌 모든 강의 일정을 찾아 날짜순 JSON 배열로 반환하세요.
+        const teacherFilter = (document.getElementById('ttTeacherFilter')?.value || '').trim();
+        const excludeFilter = (document.getElementById('ttExcludeFilter')?.value || '').trim();
+        const curYear = new Date().getFullYear();
+        const prompt = `이 이미지는 세무사/회계사 학원의 주간·월간 종합 강의 시간표 표입니다.
+표의 모든 주(행)와 요일(월~토 열)을 빠짐없이 읽고, 아래 필터 규칙에 맞는 강의 일정만 JSON 배열로 추출하세요. ('설날 연휴' 등 휴강/공휴일 안내는 제외)
+
 규칙:
-- 연도가 표시되지 않았으면 ${new Date().getFullYear()}년(단, 현재가 11~12월이고 달력이 1~2월이면 ${new Date().getFullYear() + 1}년)으로 판단해 반드시 YYYY-MM-DD 형식으로 적으세요.
-- subject는 세법, 원가관리회계, 재무회계, 재정학, 상법 중 가장 가까운 과목명으로 적으세요.
-- title은 시간대/강사명/과목이 드러나게 간결히 적으세요 (예: "오후 세법 객관식", "오전 원가관리회계(강경태)").
-${(document.getElementById('ttTeacherFilter')?.value || '').trim() ? `- 중요: 사용자가 지정한 강사('${document.getElementById('ttTeacherFilter').value.trim()}')의 강의만 골라서 추출하고 다른 강사 강의는 제외하세요.` : ''}
-응답 형식(JSON 배열만): [{"date":"2026-11-30","subject":"세법","title":"오후 세법 객관식"}]`;
+1. 날짜 형식: 반드시 YYYY-MM-DD 로 적으세요. 표에 연도가 없으면 ${curYear}년 11~12월은 ${curYear}-MM-DD, 이어지는 1~2월은 ${curYear + 1}-MM-DD 로 적으세요.
+2. subject: '재무회계'(중급회계 포함), '원가관리회계', '세법'(행정소송법 포함), '재정학', '상법' 중 가장 가까운 과목명 1개만 적으세요.
+3. title: 강의명과 괄호 안 강사명/시간을 그대로 간결히 적으세요 (예: "객관식 원가관리회계(강경태)").
+4. ${excludeFilter
+  ? `제외 과목(미수강): '${excludeFilter}'에 해당하는 과목이나 키워드가 들어간 강의는 강사명 유무와 관계없이 무조건 제외하세요.`
+  : '제외 과목 없음.'}
+5. ${teacherFilter
+  ? `강사 필터 규칙(중요):
+   - 괄호 안에 강사명이 적혀 있는 강의(예: "객관식 세법(원재훈)", "객관식 원가관리회계(강경태)")는 '${teacherFilter}'에 포함된 강사의 강의만 추출하고, 다른 강사 이름이 적힌 강의는 제외하세요.
+   - 괄호에 강사명 없이 과목명만 단독으로 적혀 있는 강의(예: "객관식 세법", "객관식 중급회계", "객관식 재정학")는 4번 제외 과목에 해당하지 않는 한 **모두 포함**해서 추출하세요!`
+  : '강사 필터 없음: 4번 제외 과목을 제외한 표의 모든 강의를 빠짐없이 추출하세요.'}
+6. 응답은 설명 없이 오직 JSON 배열만 출력하세요: [{"date":"2026-12-03","subject":"원가관리회계","title":"객관식 원가관리회계(강경태)"}]`;
+
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: mime, data: b64 } }] }],
-            generationConfig: { response_mime_type: 'application/json' }
+            generationConfig: {
+              response_mime_type: 'application/json',
+              maxOutputTokens: 8192,
+              temperature: 0.1
+            }
           })
         });
-        if (!res.ok) throw new Error('Timetable Vision Error');
+        if (!res.ok) {
+          const errText = await res.text().catch(() => '');
+          return { ok: false, reason: `API ${res.status}`, detail: errText, items: [] };
+        }
         const data = await res.json();
-        const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || '[]');
-        if (!Array.isArray(parsed) || parsed.length === 0) return null;
-        return parsed.map(it => {
-          const matchedSub = getAllSubjects().find(sub => it.subject && (sub.name.includes(it.subject) || it.subject.includes(sub.name))) || getAllSubjects()[0];
+        let rawText = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+        rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+
+        let parsed = [];
+        try {
+          parsed = JSON.parse(rawText || '[]');
+        } catch (jsonErr) {
+          const objs = rawText.match(/\{[^{}]+\}/g) || [];
+          parsed = objs.map(o => { try { return JSON.parse(o); } catch (e) { return null; } }).filter(Boolean);
+        }
+
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          return { ok: true, items: [] };
+        }
+
+        const mapped = parsed.map(it => {
+          const rawSub = String(it.subject || '');
+          const matchedSub = getAllSubjects().find(sub =>
+            sub.name.includes(rawSub) || rawSub.includes(sub.name) ||
+            (rawSub.includes('중급') && sub.id === 'fin') ||
+            (rawSub.includes('행정') && sub.id === 'tax')
+          ) || getAllSubjects()[0];
           return {
             date: it.date || TODAY,
             subjectId: matchedSub.id,
             title: it.title || `${matchedSub.name} 강의`
           };
         });
+        return { ok: true, items: mapped };
       } catch (err) {
-        return null;
+        return { ok: false, reason: 'network_or_parse', items: [] };
       }
     }
 
@@ -3310,7 +3381,7 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
         scanOverlay.classList.add('hidden');
         parsedDraftItems = extractedItems;
         renderParsedCards();
-        showToast('날짜·과목·시간을 추출했습니다 (0:00:00 과목 제외)');
+        showToast(`${document.getElementById('captureTargetDate').value} 날짜로 과목·시간을 추출했습니다`);
       }, 900);
     }
 
@@ -4255,30 +4326,46 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
       });
 
       // Academy Timetable Upload / Sample
+      async function runTimetableExtraction(dataUrl) {
+        if (!dataUrl) return;
+        lastTimetableDataUrl = dataUrl;
+        const reBtn = document.getElementById('btnReextractTimetable');
+        if (reBtn) reBtn.classList.remove('hidden');
+        if (state.geminiApiKey) {
+          showToast('Gemini AI가 시간표를 정밀 분석하고 있습니다...');
+          const result = await callRealGeminiTimetable(dataUrl);
+          if (result.ok && result.items.length > 0) {
+            renderTimetableDrafts(result.items);
+            showToast(`시간표에서 ${result.items.length}개 강의 일정을 인식했습니다!`);
+            return;
+          }
+          if (result.ok && result.items.length === 0) {
+            renderTimetableDrafts([]);
+            showToast('조건에 맞는 강의를 찾지 못했습니다. 강사명 철자를 확인하거나 비우고 다시 추출해 보세요.');
+            return;
+          }
+          showToast(`시간표 인식 중 오류가 발생했습니다 (${result.reason}). 잠시 후 다시 시도해 주세요.`);
+          return;
+        }
+        showToast('API 키 미설정 상태라 샘플 시간표로 표시됩니다.');
+        renderTimetableDrafts([
+          { date: '2026-11-30', subjectId: 'tax', title: '오후 세법 객관식' },
+          { date: '2026-12-02', subjectId: 'tax', title: '오후 세법 객관식' },
+          { date: '2026-12-03', subjectId: 'cost', title: '오전 원가관리회계 (강경태)' }
+        ]);
+      }
+
       document.getElementById('timetableFileInput').addEventListener('change', e => {
         const file = e.target.files && e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = async ev => {
-          if (state.geminiApiKey) {
-            showToast('Gemini AI가 월간 강의 달력을 분석하고 있습니다...');
-            const realItems = await callRealGeminiTimetable(ev.target.result);
-            if (realItems && realItems.length > 0) {
-              renderTimetableDrafts(realItems);
-              showToast(`시간표에서 ${realItems.length}개 강의 일정을 인식했습니다!`);
-              return;
-            }
-          } else {
-            showToast('API 키 미설정 상태라 샘플 시간표로 표시됩니다.');
-          }
-          renderTimetableDrafts([
-            { date: '2026-11-30', subjectId: 'tax', title: '오후 세법 객관식' },
-            { date: '2026-12-02', subjectId: 'tax', title: '오후 세법 객관식' },
-            { date: '2026-12-03', subjectId: 'cost', title: '오전 원가관리회계 (강경태)' }
-          ]);
-        };
+        reader.onload = ev => runTimetableExtraction(ev.target.result);
         reader.readAsDataURL(file);
         e.target.value = '';
+      });
+
+      document.getElementById('btnReextractTimetable').addEventListener('click', () => {
+        if (lastTimetableDataUrl) runTimetableExtraction(lastTimetableDataUrl);
       });
 
       document.getElementById('btnSampleTimetable').addEventListener('click', () => {
