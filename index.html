@@ -659,7 +659,6 @@
         <button type="button" id="btnCloseLogModal" class="w-7 h-7 rounded-full bg-black/[0.05] hover:bg-black/[0.09] flex items-center justify-center text-[#6e6e73]" aria-label="닫기">
           <i data-lucide="x" class="w-4 h-4"></i>
         </button>
-        </div>
       </div>
 
       <!-- 3-Way Apple Segmented Control -->
@@ -992,19 +991,16 @@
         <div class="flex items-center gap-1.5">
           <button type="button" id="btnResetSamChat" class="px-2.5 py-1 rounded-full bg-black/[0.05] hover:bg-black/[0.09] text-[11px] font-semibold text-[#6e6e73] hover:text-[#1d1d1f] transition" title="대화 내용 초기화">초기화</button>
           <button type="button" id="btnCloseSam" class="w-7 h-7 rounded-full bg-black/[0.05] hover:bg-black/[0.09] flex items-center justify-center text-[#6e6e73]" aria-label="SAM 닫기">
-          <i data-lucide="x" class="w-4 h-4"></i>
-        </button>
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
       </div>
 
       <!-- Quick Command Chips -->
       <div class="px-4 py-2.5 border-b border-black/[0.05] bg-white flex gap-1.5 overflow-x-auto shrink-0">
-        <button type="button" id="btnSamSampleYpt" class="px-3 py-1.5 rounded-full bg-[#fff4ed] hover:bg-[#ffe8d9] text-[11px] font-bold text-[#c2410c] whitespace-nowrap transition">📷 열품타 반영 테스트</button>
         <button type="button" data-sam-cmd="brief" class="sam-cmd-btn px-3 py-1.5 rounded-full bg-[#f5f5f7] hover:bg-[#007aff]/10 hover:text-[#007aff] text-[11px] font-semibold text-[#1d1d1f] whitespace-nowrap transition">오늘 브리핑</button>
         <button type="button" data-sam-cmd="weakness" class="sam-cmd-btn px-3 py-1.5 rounded-full bg-[#f5f5f7] hover:bg-[#007aff]/10 hover:text-[#007aff] text-[11px] font-semibold text-[#1d1d1f] whitespace-nowrap transition">약점·과락 분석</button>
         <button type="button" data-sam-cmd="confused" class="sam-cmd-btn px-3 py-1.5 rounded-full bg-[#f5f5f7] hover:bg-[#007aff]/10 hover:text-[#007aff] text-[11px] font-semibold text-[#1d1d1f] whitespace-nowrap transition">헷갈린 개념</button>
-        <button type="button" id="btnSamMiniTest" class="px-3 py-1.5 rounded-full bg-[#007aff]/10 hover:bg-[#007aff]/20 text-[11px] font-bold text-[#007aff] whitespace-nowrap transition">📝 Day 미니테스트</button>
-        <button type="button" id="btnSamPasteTest" class="px-3 py-1.5 rounded-full bg-[#f5f5f7] hover:bg-black/[0.07] text-[11px] font-semibold text-[#1d1d1f] whitespace-nowrap transition">📋 문제지 붙여넣기</button>
-        <button type="button" id="btnSamSavedTests" class="px-3 py-1.5 rounded-full bg-[#f5f5f7] hover:bg-black/[0.07] text-[11px] font-semibold text-[#1d1d1f] whitespace-nowrap transition">📚 저장된 시험지</button>
         <button type="button" data-sam-cmd="quiz" class="sam-cmd-btn px-3 py-1.5 rounded-full bg-[#f5f5f7] hover:bg-[#007aff]/10 hover:text-[#007aff] text-[11px] font-semibold text-[#1d1d1f] whitespace-nowrap transition">1분 O/X 퀴즈</button>
       </div>
 
@@ -3472,23 +3468,7 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
           appendSamMessage('sam', reply);
         });
       });
-      document.getElementById('btnSamMiniTest').addEventListener('click', launchSamMiniTest);
-      document.getElementById('btnSamPasteTest').addEventListener('click', openPasteMiniTestBox);
-      document.getElementById('btnSamSavedTests').addEventListener('click', showSavedMiniTestsArchive);
-      document.getElementById('btnSamSampleYpt').addEventListener('click', () => {
-        const mockHtml = buildYeolpumtaMockHtml('11. 20 (금)', '10:06:25', [
-          { name: '재무회계', time: '3:22:40', zero: false },
-          { name: '세법', time: '3:31:41', zero: false },
-          { name: '원가관리회계', time: '3:12:03', zero: false },
-          { name: '재정학', time: '0:00:00', zero: true },
-          { name: '상법', time: '0:00:00', zero: true }
-        ]);
-        handleSamYeolpumtaImage(mockHtml, '2026-11-20', [
-          { subjectId: 'fin', durationMinutes: 203, content: '재무회계 (열품타 자동 기록)' },
-          { subjectId: 'tax', durationMinutes: 212, content: '세법 (열품타 자동 기록)' },
-          { subjectId: 'cost', durationMinutes: 192, content: '원가관리회계 (열품타 자동 기록)' }
-        ]);
-      });
+
 
       document.getElementById('samFileInput').addEventListener('change', e => {
         const file = e.target.files && e.target.files[0];
