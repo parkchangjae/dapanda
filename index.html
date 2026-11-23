@@ -225,19 +225,21 @@
 
         <!-- RIGHT COLUMN (3 cols): Weather, AI Briefing, Weekly Rhythm & Reminders -->
         <aside class="lg:col-span-3 space-y-5 lg:sticky lg:top-20">
-          <!-- Live Geolocation Weather Widget -->
-          <div class="rounded-2xl bg-[#f5f5f7] p-4 flex items-center justify-between gap-3">
-            <div class="flex items-center gap-3 min-w-0">
-              <span id="weatherEmoji" class="text-2xl leading-none shrink-0">🌤️</span>
-              <div class="min-w-0">
-                <div class="flex items-baseline gap-1.5">
-                  <span id="weatherTemp" class="text-lg font-bold tabular-nums text-[#1d1d1f]">--°</span>
-                  <span id="weatherDesc" class="text-[11px] font-semibold text-[#6e6e73] truncate">위치 확인 중</span>
+          <!-- Live Geolocation Weather Widget (Full-width bottom line, zero clipping) -->
+          <div class="rounded-2xl bg-[#f5f5f7] p-4 space-y-1.5">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span id="weatherEmoji" class="text-2xl leading-none shrink-0">🌤️</span>
+                <div class="flex items-baseline gap-1.5 min-w-0">
+                  <span id="weatherTemp" class="text-lg font-bold tabular-nums text-[#1d1d1f] shrink-0">--°</span>
+                  <span id="weatherDesc" class="text-xs font-semibold text-[#6e6e73] truncate">위치 확인 중</span>
                 </div>
-                <p id="weatherLoc" class="text-[10.5px] text-[#86868b] truncate">내 위치 날씨 연동</p>
               </div>
+              <button type="button" id="btnRefreshWeather" class="w-7 h-7 rounded-lg bg-white hover:bg-black/[0.04] text-[#007aff] shadow-2xs flex items-center justify-center shrink-0 transition" title="현재 위치 날씨 새로고침" aria-label="위치 새로고침">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5"></i>
+              </button>
             </div>
-            <button type="button" id="btnRefreshWeather" class="px-2.5 py-1 rounded-lg bg-white hover:bg-black/[0.04] text-[10.5px] font-semibold text-[#007aff] shadow-2xs shrink-0 transition">위치 동기화</button>
+            <p id="weatherLoc" class="text-[11px] font-medium text-[#86868b] leading-snug">내 위치 날씨 연동 중...</p>
           </div>
 
           <!-- AI 1-Minute Warmup Box -->
@@ -1904,9 +1906,14 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
 
 
     const AI_BRIEFS = [
-      { tag: '경제 · 세법 연결', title: '기준금리 동결과 기업 차입원가 자본화', body: '금리 변동이 클수록 재무회계의 차입원가 자본화(특정·일반차입금)와 세법상 인정이자 계산 이슈의 출제 빈도가 높아집니다.' },
-      { tag: '오늘의 워밍업', title: '시작 전 10분, 어제 헷갈린 1문제만 먼저', body: '새 진도를 나가기 전 복습 큐에 쌓인 1건을 먼저 해결하면 오늘 공부 몰입도가 훨씬 빠르게 올라옵니다.' },
-      { tag: '시사 · 재정학', title: '세수 결손 논의와 최적조세·초과부담', body: '간접세와 직접세 비중 조정 뉴스는 재정학의 초과부담(Deadweight Loss) 및 램지 규칙 개념과 바로 이어집니다.' }
+      { tag: '경제 · 세법 연결', title: '기준금리 변화와 기업 차입원가 자본화', body: '금리 변동이 클수록 재무회계의 차입원가 자본화(특정·일반차입금)와 세법상 인정이자 계산 이슈의 출제 빈도가 높아집니다.' },
+      { tag: '세법 · 최신 기준', title: '부가세 간이과세 1억 400만 원 기준 정리', body: '개인사업자 직전 연도 공급대가 1억 400만 원 미만 기준과 세금계산서 발급 의무 구간(4,800만 원 이상)을 꼭 구분해 두세요.' },
+      { tag: '시사 · 재정학', title: '세수 결손 논의와 최적조세·초과부담', body: '간접세와 직접세 비중 조정 뉴스는 재정학의 초과부담(Deadweight Loss) 및 램지 규칙(탄력성 반비례) 개념과 바로 이어집니다.' },
+      { tag: '회계 · K-IFRS 1118호', title: '영업손익 범주 개편 핵심 포인트', body: 'K-IFRS 제1118호 도입으로 투자·재무 범주에 속하지 않는 잔여 손익이 영업손익으로 분류되는 구조를 다시 점검해 보세요.' },
+      { tag: '상법 · 최신 개정', title: '자기주식 취득 및 1년 내 소각 의무(제341조의4)', body: '상법 제341조의4 자기주식 소각 의무와 배당가능이익 한도, 의결권·배당권 제한 규정은 말문제 단골 지문입니다.' },
+      { tag: '원가 · 실전 와꾸', title: '표준원가 차이분석 3열 T계정 스캔법', body: '변동원가 차이분석에서는 고정제조간접원가 함정 자료를 먼저 지우고 실제 | AQ×SP | SQ×SP 3열만 세우면 실수가 사라집니다.' },
+      { tag: '재무 · 문단 20A', title: '시운전 시제품 매각대금 당기손익(P/L) 처리', body: 'K-IFRS 제1016호 문단 20A에 따라 유형자산 가동 전 시제품 매각수익과 관련 원가는 취득원가 차감이 아닌 당기손익으로 인식합니다.' },
+      { tag: '오늘의 워밍업', title: '시작 전 10분, 어제 헷갈린 1문제만 먼저', body: '새 진도를 나가기 전 복습 큐에 쌓인 1건을 먼저 해결하면 오늘 공부 몰입도가 훨씬 빠르게 올라옵니다.' }
     ];
     let aiBriefIdx = 0;
     let liveAiBriefCache = null;
@@ -1914,34 +1921,47 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
     async function fetchLiveAiBrief() {
       const apiKey = (state.geminiApiKey || '').trim();
       if (!apiKey) {
-        aiBriefIdx++;
+        aiBriefIdx = (aiBriefIdx + 1) % AI_BRIEFS.length;
         renderAiBrief();
-        showToast('API 키 연결 시 오늘의 실시간 경제·세법 뉴스를 가져옵니다.');
         return;
       }
       const box = document.getElementById('homeAiBriefCard');
-      if (box) box.innerHTML = '<p class="text-xs text-[#86868b] py-2">실시간 오늘의 경제·세법 뉴스를 검색하고 있어요...</p>';
+      if (box && !liveAiBriefCache) {
+        box.innerHTML = '<p class="text-xs text-[#86868b] py-2">실시간 경제·세법·시사 이슈를 가져오고 있어요...</p>';
+      }
       try {
-        const prompt = `오늘(${TODAY}) 기준 한국 경제, 세법 개정, 금융/회계 또는 세무사 수험생이 공부 전 1분 만에 읽고 환기할 만한 최신 시사 뉴스 1건을 Google 검색으로 찾아 아래 JSON 형식으로만 요약해 주세요.
-형식: {"tag":"분야 태그(예: 오늘의 경제·세법)","title":"핵심 제목 1줄","body":"수험생의 세법·재무회계·재정학 공부와 연결되는 2~3줄 요약"}`;
+        const topics = ['한국 세법 개정 또는 국세청 이슈', '한국은행 기준금리·환율 등 최신 경제 뉴스', '기업 회계·공시 또는 상법 자사주 관련 최신 뉴스', '국가 재정·조세 정책 관련 최신 시사'];
+        const pickTopic = topics[Math.floor(Math.random() * topics.length)];
+        const prompt = `오늘(${TODAY}) 기준 "${pickTopic}" 관련 최신 뉴스 1건을 Google 검색으로 찾아 세무사 수험생이 공부 전 1분 만에 읽고 환기할 수 있게 아래 3줄 형식으로만 답해 주세요. 다른 설명이나 마크다운 기호는 빼세요.
+TAG: 분야 태그 (예: 오늘의 경제·세법)
+TITLE: 핵심 뉴스 제목 1줄
+BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사점을 주는 2~3문장 요약`;
+
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            tools: [{ google_search: {} }],
-            generationConfig: { response_mime_type: 'application/json' }
+            tools: [{ google_search: {} }]
           })
         });
+        if (!res.ok) throw new Error('Brief API error');
         const data = await res.json();
-        const parsed = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text || '{}');
-        if (parsed.title && parsed.body) {
-          liveAiBriefCache = parsed;
+        const raw = data.candidates?.[0]?.content?.parts?.map(pt => pt.text || '').join('\n') || '';
+        const tagM = raw.match(/TAG\s*[:：]\s*(.+)/i);
+        const titleM = raw.match(/TITLE\s*[:：]\s*(.+)/i);
+        const bodyM = raw.match(/BODY\s*[:：]\s*([\s\S]+)/i);
+        if (titleM && bodyM) {
+          liveAiBriefCache = {
+            tag: (tagM ? tagM[1] : '실시간 뉴스').trim(),
+            title: titleM[1].trim(),
+            body: bodyM[1].trim()
+          };
           renderAiBrief();
           return;
         }
       } catch (e) {}
-      aiBriefIdx++;
+      aiBriefIdx = (aiBriefIdx + 1) % AI_BRIEFS.length;
       liveAiBriefCache = null;
       renderAiBrief();
     }
@@ -1957,9 +1977,7 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
       `;
     }
 
-
     let weatherCache = null;
-
     function mapWmoCode(code) {
       if (code === 0) return { emoji: '☀️', desc: '맑음' };
       if (code <= 3) return { emoji: '⛅', desc: '구름 조금' };
@@ -3292,7 +3310,6 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
       });
       document.getElementById('btnHomeGoWeek').addEventListener('click', () => switchView('week'));
       document.getElementById('btnHomeGoReview').addEventListener('click', () => switchView('review'));
-      document.getElementById('btnRefreshAiBrief').addEventListener('click', () => { aiBriefIdx++; renderAiBrief(); });
       document.getElementById('btnOpenReminderAdd').addEventListener('click', () => openLogModal({ date: TODAY, mode: 'reminder' }));
 
       document.getElementById('btnToggleRemindersInWeek').addEventListener('click', () => {
@@ -3433,6 +3450,9 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
       document.getElementById('btnRefreshAiBrief').addEventListener('click', fetchLiveAiBrief);
       document.getElementById('btnRefreshWeather').addEventListener('click', () => requestUserWeather(true));
       requestUserWeather(false);
+      if (state.geminiApiKey) fetchLiveAiBrief();
+      clearInterval(window.__aiBriefTimer);
+      window.__aiBriefTimer = setInterval(fetchLiveAiBrief, 120000);
       document.getElementById('btnResetSamChat').addEventListener('click', () => {
         samHistory = [];
         samPendingBatch = null;
