@@ -1437,7 +1437,7 @@
     let samHistory = [];
 
 
-    const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-4-hydrogen', 'gemini-2.5-flash'];
+    const GEMINI_MODELS = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-4-hydrogen', 'gemini-2.5-flash'];
     async function callGeminiModel(apiKey, bodyObj) {
       let lastRes = null;
       for (const model of GEMINI_MODELS) {
@@ -1448,7 +1448,9 @@
         });
         if (res.ok) return res;
         lastRes = res;
-        if (res.status !== 404 && res.status !== 400) break;
+        // Stop immediately only on auth/key errors (401/403); otherwise fall back to next model (404/400/429/500/503)
+        if (res.status === 401 || res.status === 403) break;
+        await new Promise(r => setTimeout(r, 350));
       }
       return lastRes;
     }
