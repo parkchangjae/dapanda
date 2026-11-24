@@ -15,6 +15,10 @@
     :root {
       --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Apple SD Gothic Neo", "Pretendard", "Inter", sans-serif;
     }
+    html, body {
+      overscroll-behavior: none;
+      overscroll-behavior-y: none;
+    }
     body {
       font-family: var(--font-sans);
       -webkit-font-smoothing: antialiased;
@@ -36,6 +40,20 @@
     }
     body.is-standalone #appTopHeader {
       padding-top: max(28px, env(safe-area-inset-top));
+    }
+    @media (min-width: 1024px) {
+      .home-side-sticky {
+        position: sticky;
+        top: 77px;
+      }
+      @media (display-mode: standalone) {
+        .home-side-sticky {
+          top: 105px;
+        }
+      }
+      body.is-standalone .home-side-sticky {
+        top: 105px;
+      }
     }
     ::-webkit-scrollbar {
       width: 5px;
@@ -172,7 +190,7 @@
     <section id="viewHome" class="hidden">
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <!-- LEFT COLUMN (3 cols): Subject Communities & Quick Filters -->
-        <aside class="lg:col-span-3 space-y-5 lg:sticky lg:top-20">
+        <aside class="lg:col-span-3 space-y-5 home-side-sticky">
           <!-- Korean Mini Calendar (Sun/Holiday Red, Sat Blue) -->
           <div id="homeMiniCalBox" class="rounded-2xl border border-black/[0.06] bg-white p-3.5 space-y-2.5"></div>
 
@@ -236,7 +254,7 @@
         </div>
 
         <!-- RIGHT COLUMN (3 cols): Weather, AI Briefing, Weekly Rhythm & Reminders -->
-        <aside class="lg:col-span-3 space-y-5 lg:sticky lg:top-20">
+        <aside class="lg:col-span-3 space-y-5 home-side-sticky">
           <!-- Live Geolocation Weather Widget (Full-width bottom line, zero clipping) -->
           <div class="rounded-2xl bg-[#f5f5f7] p-4 space-y-1.5">
             <div class="flex items-center justify-between gap-2">
@@ -1522,7 +1540,7 @@
           });
         if (!res.ok) throw new Error('API Error');
         const data = await res.json();
-        const txt = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+        const txt = data.candidates?.[0]?.content?.parts?.filter(p => !p.thought).map(p => p.text || '').join('') || '';
         return txt ? `<p class="whitespace-pre-wrap">${escapeHtml(txt)}</p>` : null;
       } catch (err) {
         return null;
@@ -2268,27 +2286,27 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
       try {
         const topics = ['한국 세법 개정 또는 국세청 이슈', '한국은행 기준금리·환율 등 최신 경제 뉴스', '기업 회계·공시 또는 상법 자사주 관련 최신 뉴스', '국가 재정·조세 정책 관련 최신 시사'];
         const pickTopic = topics[Math.floor(Math.random() * topics.length)];
-        const prompt = `오늘(${TODAY}) 기준 "${pickTopic}" 관련 최신 뉴스 1건을 Google 검색으로 찾아 세무사 수험생이 공부 전 1분 만에 읽고 환기할 수 있게 아래 3줄 형식으로만 답해 주세요. 다른 설명이나 마크다운 기호는 빼세요.
-TAG: 분야 태그 (예: 오늘의 경제·세법)
-TITLE: 핵심 뉴스 제목 1줄
-BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사점을 주는 2~3문장 요약`;
+        const prompt = `가장 최근의 "${pickTopic}" 관련 한국 뉴스 1건을 Google 검색으로 찾아, 세무사 수험생이 공부 전 1분 만에 읽고 환기할 수 있게 반드시 한국어로만 아래 3줄 형식으로 답하세요. 영어 설명, 생각 과정, 대괄호([]) 안내 문구는 절대 쓰지 마세요.
+TAG: 분야명
+TITLE: 뉴스 핵심 제목 한 줄
+BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
 
         const res = await callGeminiModel(apiKey, {
             contents: [{ parts: [{ text: prompt }] }],
             tools: [{ google_search: {} }]
           });
-        if (!res.ok) throw new Error('Brief API error');
+        if (!res || !res.ok) throw new Error('Brief API error');
         const data = await res.json();
-        const raw = data.candidates?.[0]?.content?.parts?.map(pt => pt.text || '').join('\n') || '';
+        const raw = data.candidates?.[0]?.content?.parts?.filter(pt => !pt.thought).map(pt => pt.text || '').join('\n') || '';
         const tagM = raw.match(/TAG\s*[:：]\s*(.+)/i);
         const titleM = raw.match(/TITLE\s*[:：]\s*(.+)/i);
         const bodyM = raw.match(/BODY\s*[:：]\s*([\s\S]+)/i);
-        if (titleM && bodyM) {
-          liveAiBriefCache = {
-            tag: (tagM ? tagM[1] : '실시간 뉴스').trim(),
-            title: titleM[1].trim(),
-            body: bodyM[1].trim()
-          };
+        const tagVal = (tagM ? tagM[1] : '실시간 뉴스').replace(/[*`]/g, '').trim();
+        const titleVal = (titleM ? titleM[1] : '').replace(/[*`]/g, '').trim();
+        const bodyVal = (bodyM ? bodyM[1] : '').replace(/[*`]/g, '').trim();
+        const isLeaked = !titleVal || !bodyVal || /Constraint Check|Self-Correction|I am an AI|\[Category|\[Core News|\[2-3 sentences/i.test(raw) || bodyVal.length > 260;
+        if (!isLeaked) {
+          liveAiBriefCache = { tag: tagVal, title: titleVal, body: bodyVal };
           renderAiBrief();
           return;
         }
@@ -2668,7 +2686,9 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
       }
 
 
-      const allWrongItems = state.reviews.filter(r => r.status === 'pending' && (r.isQuizWrong || String(r.title || '').startsWith('[문제풀이') || String(r.title || '').startsWith('[미니테스트')));
+      const wrongBase = state.reviews.filter(r => r.isQuizWrong || String(r.title || '').startsWith('[문제풀이') || String(r.title || '').startsWith('[미니테스트'));
+      const allWrongItems = wrongBase.filter(r => r.status === 'pending' && r.lastReviewedDate !== TODAY);
+      const doneTodayWrongItems = wrongBase.filter(r => (r.status === 'done' || r.lastReviewedDate === TODAY));
       const wrongDot = document.getElementById('homeWrongRedDot');
       const wrongBadge = document.getElementById('homeWrongCountBadge');
       if (wrongDot) wrongDot.classList.toggle('hidden', allWrongItems.length === 0);
@@ -2683,12 +2703,37 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
           : allWrongItems.filter(w => w.subjectId === homeTopicFilter);
         document.getElementById('homeFeedCount').textContent = `미복습 오답 ${filteredWrong.length}건`;
         const feedBox = document.getElementById('homeRedditFeed');
+        const doneTodayFilteredEmpty = homeTopicFilter === 'all'
+          ? doneTodayWrongItems
+          : doneTodayWrongItems.filter(w => w.subjectId === homeTopicFilter);
         if (filteredWrong.length === 0) {
+          const doneListEmpty = doneTodayFilteredEmpty.length > 0 ? `
+            <details open class="pt-2 text-left">
+              <summary class="px-1 text-[11px] font-semibold text-emerald-600 cursor-pointer select-none hover:underline list-none">
+                ✓ 오늘 복습 완료한 문제 (${doneTodayFilteredEmpty.length}건) ▾
+              </summary>
+              <div class="mt-2 space-y-2">
+                ${doneTodayFilteredEmpty.map(w => {
+                  const sub = getSubject(w.subjectId);
+                  return `
+                    <div class="rounded-xl border border-emerald-200/70 bg-emerald-50/40 px-3.5 py-2.5 flex items-center justify-between gap-2">
+                      <div class="min-w-0">
+                        <span class="text-[10.5px] font-bold text-emerald-700">${escapeHtml(sub.name)} · ${w.status === 'done' ? '마스터 완료' : `다음 복습 ${w.nextReviewDate}`}</span>
+                        <p class="text-xs font-medium text-[#6e6e73] line-through truncate">${escapeHtml(w.fullQuestion || w.title)}</p>
+                      </div>
+                      <span class="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shrink-0">완료 ✓</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </details>
+          ` : '';
           feedBox.innerHTML = `
             <div class="rounded-2xl border border-dashed border-black/10 p-8 text-center space-y-2">
               <p class="text-xs text-[#86868b]">미복습 오답이 없습니다. 완벽해요!</p>
               <button type="button" id="btnGoQuizFromHome" class="text-xs font-semibold text-[#007aff] hover:underline">문제풀이로 가기</button>
             </div>
+            ${doneListEmpty}
           `;
         } else {
           const cards = filteredWrong.map(w => {
@@ -2740,12 +2785,37 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
               </div>
             `;
           }).join('');
+          const doneTodayFiltered = homeTopicFilter === 'all'
+            ? doneTodayWrongItems
+            : doneTodayWrongItems.filter(w => w.subjectId === homeTopicFilter);
+          const doneTodayHtml = doneTodayFiltered.length > 0 ? `
+            <details class="pt-2">
+              <summary class="px-1 text-[11px] font-semibold text-emerald-600 cursor-pointer select-none hover:underline list-none">
+                ✓ 오늘 복습 완료한 문제 (${doneTodayFiltered.length}건) ▾
+              </summary>
+              <div class="mt-2 space-y-2">
+                ${doneTodayFiltered.map(w => {
+                  const sub = getSubject(w.subjectId);
+                  return `
+                    <div class="rounded-xl border border-emerald-200/70 bg-emerald-50/40 px-3.5 py-2.5 flex items-center justify-between gap-2">
+                      <div class="min-w-0">
+                        <span class="text-[10.5px] font-bold text-emerald-700">${escapeHtml(sub.name)} · ${w.status === 'done' ? '마스터 완료' : `다음 복습 ${w.nextReviewDate}`}</span>
+                        <p class="text-xs font-medium text-[#6e6e73] line-through truncate">${escapeHtml(w.fullQuestion || w.title)}</p>
+                      </div>
+                      <span class="px-2 py-0.5 rounded-full bg-emerald-500 text-white text-[10px] font-bold shrink-0">완료 ✓</span>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </details>
+          ` : '';
           feedBox.innerHTML = `
             <div class="flex items-center justify-between px-1 pb-1">
               <span class="text-xs font-bold text-rose-600">❌ 미복습 오답 노트</span>
               <button type="button" id="btnGoQuizFromHome" class="text-[11px] font-semibold text-[#007aff] hover:underline">문제풀이로 가기</button>
             </div>
             ${cards}
+            ${doneTodayHtml}
           `;
         }
       } else {
@@ -4539,6 +4609,7 @@ JSON 배열만 출력: [{"subjectId":"fin","subjectName":"재무회계","source"
                 const days = EBBINGHAUS_STEPS[nextIdx];
                 item.stepIndex = nextIdx;
                 item.reviewCount = (item.reviewCount || 0) + 1;
+                item.lastReviewedDate = TODAY;
                 item.nextReviewDate = addDays(TODAY, days);
                 saveState();
                 renderAll();
