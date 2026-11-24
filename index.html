@@ -1472,10 +1472,37 @@
 
 
     const GEMINI_MODELS_FALLBACK = ['gemini-3.5-flash-lite', 'gemini-3.8-flash', 'gemini-4-hydrogen', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+    const WORKING_MODEL_KEY = 'dapanda_working_gemini_model_v1';
     let cachedGeminiModels = null;
+
+    function compressImageForVision(dataUrl, maxDim = 1100, quality = 0.78) {
+      return new Promise(resolve => {
+        if (!dataUrl || !dataUrl.startsWith('data:image/')) { resolve(dataUrl); return; }
+        const img = new Image();
+        img.onload = () => {
+          const w = img.width, h = img.height;
+          if (w <= maxDim && h <= maxDim) { resolve(dataUrl); return; }
+          const scale = maxDim / Math.max(w, h);
+          const cw = Math.round(w * scale), ch = Math.round(h * scale);
+          const c = document.createElement('canvas');
+          c.width = cw; c.height = ch;
+          c.getContext('2d').drawImage(img, 0, 0, cw, ch);
+          resolve(c.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    }
 
     async function getAvailableGeminiModels(apiKey) {
       if (cachedGeminiModels && cachedGeminiModels.length > 0) return cachedGeminiModels;
+      try {
+        const saved = localStorage.getItem(WORKING_MODEL_KEY);
+        if (saved) {
+          cachedGeminiModels = [saved, ...GEMINI_MODELS_FALLBACK.filter(m => m !== saved)];
+          return cachedGeminiModels;
+        }
+      } catch (e) {}
       try {
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`);
         if (res.ok) {
@@ -1510,7 +1537,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(bodyObj)
         });
-        if (res.ok) return res;
+        if (res.ok) { try { localStorage.setItem(WORKING_MODEL_KEY, model); } catch (e) {} return res; }
         lastRes = res;
         if (res.status === 401 || res.status === 403) break;
         await new Promise(r => setTimeout(r, 250));
@@ -1561,7 +1588,8 @@
       const apiKey = (state.geminiApiKey || '').trim();
       if (!apiKey) return null;
       try {
-        const [meta, b64] = dataUrl.split(',');
+        const fastUrl = await compressImageForVision(dataUrl, 1100, 0.78);
+        const [meta, b64] = fastUrl.split(',');
         const mime = (meta.match(/data:(.*?);/) || [])[1] || 'image/jpeg';
         const curYear = new Date().getFullYear();
         const prompt = `이 이미지는 열품타(열정품은타이머) 일간 공부 기록 스크린샷입니다.
@@ -1623,7 +1651,8 @@
     }
 
     async function extractTimetableChunk(chunkDataUrl, apiKey, teacherFilter, excludeFilter, curYear) {
-      const [meta, b64] = chunkDataUrl.split(',');
+      const fastChunk = await compressImageForVision(chunkDataUrl, 1500, 0.82);
+      const [meta, b64] = fastChunk.split(',');
       const mime = (meta.match(/data:(.*?);/) || [])[1] || 'image/jpeg';
       const prompt = `이 이미지는 세무사/회계사 학원 강의 시간표의 일부(또는 전체)입니다.
 보이는 모든 날짜 칸을 위에서 아래로, 왼쪽(월)에서 오른쪽(토)으로 빠짐없이 읽고 JSON 배열로 추출하세요. ('설날 연휴' 등 휴강 안내는 제외)
@@ -3760,12 +3789,13 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
       footer.classList.add('hidden');
 
       clearTimeout(window.__scanTimer);
+      const delayMs = state.geminiApiKey ? 0 : 450;
       window.__scanTimer = setTimeout(() => {
         scanOverlay.classList.add('hidden');
         parsedDraftItems = extractedItems;
         renderParsedCards();
         showToast(`${document.getElementById('captureTargetDate').value} 날짜로 과목·시간을 추출했습니다`);
-      }, 900);
+      }, delayMs);
     }
 
     function renderParsedCards() {
@@ -3991,8 +4021,8 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
 
       document.getElementById('btnHourMinus').addEventListener('click', () => setModalMinutes((Number(document.getElementById('fDurationTotal').value) || 0) - 60));
       document.getElementById('btnHourPlus').addEventListener('click', () => setModalMinutes((Number(document.getElementById('fDurationTotal').value) || 0) + 60));
-      document.getElementById('btnMinMinus').addEventListener('click', () => setModalMinutes((Number(document.getElementById('fDurationTotal').value) || 0) - 5));
-      document.getElementById('btnMinPlus').addEventListener('click', () => setModalMinutes((Number(document.getElementById('fDurationTotal').value) || 0) + 5));
+      document.getElementById('btnMinMinus').addEventListener('click', () => setModalMinutes((Number(document.getElementById('fDurationTotal').value) || 0) - 1));
+      document.getElementById('btnMinPlus').addEventListener('click', () => setModalMinutes((Number(document.getElementById('fDurationTotal').value) || 0) + 1));
       document.querySelectorAll('.time-preset-btn').forEach(btn => {
         btn.addEventListener('click', () => setModalMinutes(Number(btn.dataset.presetMin)));
       });
