@@ -2923,14 +2923,20 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
       }
       document.getElementById('homeWeekTotalLabel').textContent = formatShortTime(weekTotal);
       const maxM = Math.max(120, ...dayMins);
+      const peakM = Math.max(...dayMins);
       document.getElementById('homeMiniBars').innerHTML = dayMins.map((m, i) => {
-        const hPct = Math.round((m / maxM) * 100);
+        const hPct = m > 0 ? Math.max(12, Math.round((m / maxM) * 100)) : 0;
+        const dStr = addDays(THIS_MONDAY, i);
+        const isTodayBar = dStr === TODAY;
+        const isPeak = m > 0 && m === peakM;
+        const hrLabel = m > 0 ? (m / 60).toFixed(1) : '';
         return `
-          <div class="flex-1 flex flex-col items-center h-full justify-end gap-1">
-            <div class="w-full max-w-[18px] bg-[#f0f0f3] rounded-md flex items-end overflow-hidden" style="height: 52px;">
-              <div class="w-full bg-[#007aff] rounded-md" style="height: ${hPct}%"></div>
+          <div class="flex-1 flex flex-col items-center h-full justify-end gap-0.5" title="${dayLabels[i]} · ${formatShortTime(m)}">
+            <span class="text-[9px] font-bold tabular-nums leading-none h-3 ${isPeak ? 'text-[#007aff]' : 'text-[#86868b]'}">${hrLabel}</span>
+            <div class="w-full max-w-[18px] bg-[#f0f0f3] rounded-md flex items-end overflow-hidden" style="height: 48px;">
+              <div class="w-full rounded-md ${isTodayBar ? 'bg-[#007aff]' : (isPeak ? 'bg-[#007aff]/85' : 'bg-[#007aff]/60')}" style="height: ${hPct}%"></div>
             </div>
-            <span class="text-[10px] text-[#86868b] font-medium">${dayLabels[i]}</span>
+            <span class="text-[10px] ${isTodayBar ? 'text-[#1d1d1f] font-bold' : 'text-[#86868b] font-medium'}">${dayLabels[i]}</span>
           </div>
         `;
       }).join('');
@@ -3050,9 +3056,10 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
           ? state.reviews.filter(r => r.nextReviewDate === dStr)
           : [];
 
+        const isHoliday = !!KR_HOLIDAYS[dStr];
         const dateNum = isToday
-          ? `<span class="w-6 h-6 rounded-full bg-[#ff3b30] text-white flex items-center justify-center text-xs font-bold tabular-nums">${dt.getDate()}</span>`
-          : `<span class="text-sm font-semibold tabular-nums ${isSat ? 'text-[#007aff]' : isSun ? 'text-[#ff3b30]' : 'text-[#1d1d1f]'}">${dt.getDate()}</span>`;
+          ? `<span class="w-6 h-6 rounded-full bg-[#1d1d1f] text-white flex items-center justify-center text-xs font-bold tabular-nums">${dt.getDate()}</span>`
+          : `<span class="text-sm font-semibold tabular-nums ${(isSun || isHoliday) ? 'text-[#ff3b30]' : isSat ? 'text-[#007aff]' : 'text-[#1d1d1f]'}">${dt.getDate()}</span>`;
 
         const remindersHtml = dayReminders.length > 0
           ? `<div class="mb-2 pb-1.5 border-b border-dashed border-black/[0.07] space-y-0.5">${dayReminders.map(r => renderInlineReminder(r)).join('')}</div>`
@@ -3064,7 +3071,7 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
           <div class="px-2.5 pt-3 pb-2 flex flex-col justify-between min-h-[340px] ${isToday ? 'bg-[#007aff]/[0.02]' : ''}">
             <div>
               <div class="flex items-center justify-between mb-2.5 px-0.5">
-                <span class="text-xs font-medium ${isToday ? 'text-[#ff3b30] font-semibold' : 'text-[#86868b]'}">${dayNames[i]}</span>
+                <span class="text-xs font-medium ${isToday ? 'text-[#1d1d1f] font-bold' : (isSun || isHoliday) ? 'text-[#ff3b30]' : isSat ? 'text-[#007aff]' : 'text-[#86868b]'}">${dayNames[i]}</span>
                 ${dateNum}
               </div>
               ${remindersHtml}
@@ -3104,6 +3111,9 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
         const mins = dayLogs.reduce((a, b) => a + Number(b.durationMinutes || 0), 0);
         monthTotal += mins;
         const isToday = dStr === TODAY;
+        const dow = new Date(year, month - 1, d).getDay();
+        const isHoliday = !!KR_HOLIDAYS[dStr];
+        const mDateColor = (dow === 0 || isHoliday) ? 'text-[#ff3b30]' : (dow === 6 ? 'text-[#007aff]' : 'text-[#1d1d1f]');
 
         const pills = dayLogs.slice(0, 2).map(l => {
           const sub = getSubject(l.subjectId);
@@ -3113,7 +3123,7 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
         cells.push(`
           <button type="button" data-pick-month-date="${dStr}" class="min-h-[82px] border-r border-b border-black/[0.06] p-1.5 flex flex-col justify-between text-left hover:bg-[#f5f5f7] transition">
             <div class="flex items-center justify-between w-full">
-              <span class="text-xs font-semibold tabular-nums ${isToday ? 'w-5 h-5 rounded-full bg-[#ff3b30] text-white flex items-center justify-center' : 'text-[#1d1d1f]'}">${d}</span>
+              <span class="text-xs font-semibold tabular-nums ${isToday ? 'w-5 h-5 rounded-full bg-[#1d1d1f] text-white flex items-center justify-center' : mDateColor}">${d}</span>
               ${mins > 0 ? `<span class="text-[10px] font-bold tabular-nums text-[#86868b]">${formatShortTime(mins)}</span>` : ''}
             </div>
             <div class="space-y-0.5 w-full mt-1">${pills}</div>
@@ -3673,13 +3683,13 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
 
         // Day name & date number
         ctx.font = `600 12px ${FONT}`;
-        ctx.fillStyle = isToday ? '#ff3b30' : C_MUTED;
+        ctx.fillStyle = isToday ? C_TEXT : C_MUTED;
         ctx.textBaseline = 'middle';
         ctx.fillText(dayNames[col.i], x0 + 10, gridTop + 14);
 
         const dateText = String(col.dt.getDate());
         if (isToday) {
-          ctx.fillStyle = '#ff3b30';
+          ctx.fillStyle = state.darkMode ? '#007aff' : '#1d1d1f';
           ctx.beginPath();
           ctx.arc(x0 + COL_W - 21, gridTop + 14, 12, 0, Math.PI * 2);
           ctx.fill();
