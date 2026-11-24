@@ -2680,7 +2680,7 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
         `;
       }).join('');
 
-      const pending = state.reviews.filter(r => r.status === 'pending' && !r.isQuizWrong && !String(r.title || '').startsWith('[문제풀이') && !String(r.title || '').startsWith('[미니테스트')).slice(0, 4);
+      const pending = state.reviews.filter(r => r.status === 'pending' && !r.isQuizWrong && !String(r.title || '').startsWith('[문제풀이') && !String(r.title || '').startsWith('[미니테스트')).sort((a, b) => (a.nextReviewDate || '').localeCompare(b.nextReviewDate || '')).slice(0, 4);
       const revBox = document.getElementById('homeReviewPreview');
       revBox.innerHTML = pending.length === 0
         ? '<p class="text-xs text-[#86868b]">예정된 미리 알림이 없습니다.</p>'
@@ -2733,7 +2733,7 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
 
       // Compact upcoming review list
       const rList = document.getElementById('dayReviewList');
-      const filtered = state.reviews.filter(r => r.status === state.reviewFilter);
+      const filtered = state.reviews.filter(r => r.status === state.reviewFilter).sort((a, b) => state.reviewFilter === 'done' ? (b.nextReviewDate || '').localeCompare(a.nextReviewDate || '') : (a.nextReviewDate || '').localeCompare(b.nextReviewDate || ''));
       document.querySelectorAll('.review-filter-btn').forEach(btn => {
         const active = btn.dataset.reviewFilter === state.reviewFilter;
         btn.className = active
