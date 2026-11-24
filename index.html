@@ -2201,7 +2201,7 @@ JSON 배열만 반환: [{"subjectId":"fin|cost|tax|pub|law","subjectName":"과�
             <p class="text-sm font-semibold text-[#1d1d1f] leading-relaxed">${escapeHtml(q.question)}</p>
             <div class="space-y-1.5">
               ${q.choices.map((ch, ci) => {
-                const checkedAttr = isArch && q.chosenIndex === ci ? 'checked' : '';
+                const checkedAttr = q.chosenIndex === ci ? 'checked' : '';
                 const disabledAttr = isArch ? 'disabled' : '';
                 return `
                   <label class="flex items-start gap-2.5 px-3 py-2 rounded-xl bg-[#f5f5f7] hover:bg-black/[0.06] cursor-pointer text-xs text-[#1d1d1f] transition">
@@ -3875,6 +3875,19 @@ JSON 배열만 출력: [{"subjectId":"fin","subjectName":"재무회계","source"
           renderQuizView();
         }
       });
+      document.getElementById('quizPaperContainer').addEventListener('change', e => {
+        const radio = e.target.closest('input[type="radio"]');
+        if (!radio || !currentWideQuiz || currentWideQuiz.isArchive) return;
+        const card = radio.closest('[data-wq-idx]');
+        if (!card) return;
+        const qi = Number(card.dataset.wqIdx);
+        if (currentWideQuiz.items[qi]) {
+          currentWideQuiz.items[qi].chosenIndex = Number(radio.value);
+          state.activeQuiz = currentWideQuiz;
+          saveState();
+        }
+      });
+
       document.getElementById('quizPaperContainer').addEventListener('click', e => {
         const gradeBtn = e.target.closest('#btnGradeWideQuiz');
         if (!gradeBtn || !currentWideQuiz) return;
