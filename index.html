@@ -41,10 +41,16 @@
     body.is-standalone #appTopHeader {
       padding-top: max(28px, env(safe-area-inset-top));
     }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     @media (min-width: 1024px) {
-      .home-side-sticky {
-        position: sticky;
-        top: 77px;
+      .home-split-grid {
+        height: var(--home-pane-h, calc(100vh - 90px));
+        overflow: hidden;
+      }
+      .home-pane-scroll {
+        height: 100%;
+        overflow-y: auto;
       }
     }
     ::-webkit-scrollbar {
@@ -180,9 +186,9 @@
 
     <!-- ==================== VIEW: HOME (Reddit-style 3-Column Study Community Feed) ==================== -->
     <section id="viewHome" class="hidden">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div id="homeSplitGrid" class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start home-split-grid">
         <!-- LEFT COLUMN (3 cols): Subject Communities & Quick Filters -->
-        <aside class="lg:col-span-3 space-y-5 home-side-sticky">
+        <aside class="lg:col-span-3 space-y-5 home-pane-scroll no-scrollbar lg:pb-20">
           <!-- Korean Mini Calendar (Sun/Holiday Red, Sat Blue) -->
           <div id="homeMiniCalBox" class="rounded-2xl border border-black/[0.06] bg-white p-3.5 space-y-2.5"></div>
 
@@ -200,7 +206,7 @@
         </aside>
 
         <!-- CENTER COLUMN (6 cols): Today's Start Dashboard + Study Stream -->
-        <div class="lg:col-span-6 space-y-4">
+        <div class="lg:col-span-6 space-y-4 home-pane-scroll no-scrollbar lg:pb-24">
           <!-- Today's Command Center (SAM Briefing + Due Reminders) -->
           <div class="rounded-2xl bg-[#f5f5f7] p-4 space-y-3">
             <div class="flex items-center justify-between gap-2">
@@ -235,7 +241,7 @@
               <button type="button" data-feed-sort="wrong" class="feed-sort-btn relative px-3 py-1 rounded-full text-xs font-medium bg-black/[0.05] text-[#6e6e73] inline-flex items-center gap-1.5">
                 <span>오답노트</span>
                 <span id="homeWrongCountBadge" class="hidden text-[10px] font-bold tabular-nums opacity-80"></span>
-                <span id="homeWrongRedDot" class="hidden w-1.5 h-1.5 rounded-full bg-[#ff3b30]"></span>
+                <span id="homeWrongRedDot" class="hidden inline-block shrink-0 w-2 h-2 rounded-full bg-[#ff3b30]"></span>
               </button>
             </div>
             <span id="homeFeedCount" class="text-[11px] font-medium text-[#86868b] tabular-nums">0개의 기록</span>
@@ -246,7 +252,7 @@
         </div>
 
         <!-- RIGHT COLUMN (3 cols): Weather, AI Briefing, Weekly Rhythm & Reminders -->
-        <aside class="lg:col-span-3 space-y-5 home-side-sticky">
+        <aside class="lg:col-span-3 space-y-5 home-pane-scroll no-scrollbar lg:pb-20">
           <!-- Live Geolocation Weather Widget (Full-width bottom line, zero clipping) -->
           <div class="rounded-2xl bg-[#f5f5f7] p-4 space-y-1.5">
             <div class="flex items-center justify-between gap-2">
@@ -462,7 +468,7 @@
       <!-- Top Row: Textbook Round Tracker & Mock Exam Score Tracker -->
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-7">
         <!-- 1. Textbook Round (회독) Tracker -->
-        <div class="lg:col-span-6 space-y-4">
+        <div class="lg:col-span-6 space-y-4 home-pane-scroll no-scrollbar lg:pb-24">
           <div class="flex items-center justify-between pb-3 border-b border-black/[0.06]">
             <div>
               <h2 class="text-lg font-bold tracking-tight text-[#1d1d1f]">교재 회독 트래커</h2>
@@ -2570,10 +2576,9 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
 
     function syncStickySidebarTop() {
       const hdr = document.getElementById('appTopHeader');
-      const exactTop = (hdr ? hdr.offsetHeight : 57) + 20;
-      document.querySelectorAll('.home-side-sticky').forEach(el => {
-        el.style.top = exactTop + 'px';
-      });
+      const hdrH = hdr ? hdr.offsetHeight : 57;
+      const paneH = Math.max(480, window.innerHeight - hdrH - 22);
+      document.documentElement.style.setProperty('--home-pane-h', paneH + 'px');
     }
 
     function renderHome() {
@@ -2628,8 +2633,8 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
       document.querySelectorAll('.feed-sort-btn').forEach(btn => {
         const active = btn.dataset.feedSort === homeFeedSort;
         btn.className = active
-          ? 'feed-sort-btn px-3 py-1 rounded-full text-xs font-semibold bg-[#1d1d1f] text-white'
-          : 'feed-sort-btn px-3 py-1 rounded-full text-xs font-medium bg-black/[0.05] text-[#6e6e73]';
+          ? 'feed-sort-btn relative inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#1d1d1f] text-white'
+          : 'feed-sort-btn relative inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-black/[0.05] text-[#6e6e73]';
       });
 
 
