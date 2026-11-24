@@ -46,14 +46,6 @@
         position: sticky;
         top: 77px;
       }
-      @media (display-mode: standalone) {
-        .home-side-sticky {
-          top: 105px;
-        }
-      }
-      body.is-standalone .home-side-sticky {
-        top: 105px;
-      }
     }
     ::-webkit-scrollbar {
       width: 5px;
@@ -2576,7 +2568,16 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
       `).join('');
     }
 
+    function syncStickySidebarTop() {
+      const hdr = document.getElementById('appTopHeader');
+      const exactTop = (hdr ? hdr.offsetHeight : 57) + 20;
+      document.querySelectorAll('.home-side-sticky').forEach(el => {
+        el.style.top = exactTop + 'px';
+      });
+    }
+
     function renderHome() {
+      syncStickySidebarTop();
       renderHomeMiniCalendar();
       renderQuickMemos();
       const dueItems = state.reviews.filter(r => r.status === 'pending' && r.nextReviewDate <= TODAY);
