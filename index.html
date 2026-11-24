@@ -431,7 +431,8 @@
           </div>
         </div>
       </div>
-      <div id="fullReviewList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      <div id="reviewSubjectFilterBar" class="flex items-center gap-1.5 overflow-x-auto pb-1"></div>
+      <div id="fullReviewList" class="space-y-4"></div>
     </section>
 
     <!-- ==================== VIEW: CTA PASS MANAGEMENT (합격관리) ==================== -->
@@ -2869,52 +2870,149 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
       document.getElementById('monthGrid').innerHTML = cells.join('');
     }
 
+    let reviewSubjectFilter = 'all';
+    const collapsedReviewMonths = new Set();
+    let reviewCollapseInitialized = false;
+
+    function formatKoShortDate(dateStr) {
+      if (!dateStr) return '';
+      const parts = dateStr.split('-').map(Number);
+      if (parts.length !== 3) return dateStr;
+      const d = new Date(parts[0], parts[1] - 1, parts[2]);
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      return `${parts[1]}월 ${parts[2]}일 (${days[d.getDay()]})`;
+    }
+
     function renderReviewListInto(containerId) {
       const container = document.getElementById(containerId);
       document.querySelectorAll('.review-filter-btn').forEach(btn => {
         const active = btn.dataset.reviewFilter === state.reviewFilter;
         btn.className = active
-          ? 'review-filter-btn px-2.5 py-0.5 rounded-md font-semibold bg-white text-[#1d1d1f] shadow-2xs'
-          : 'review-filter-btn px-2.5 py-0.5 rounded-md font-medium text-[#6e6e73]';
+          ? 'review-filter-btn px-3 py-1 rounded-md font-semibold bg-white text-[#1d1d1f] shadow-2xs'
+          : 'review-filter-btn px-3 py-1 rounded-md font-medium text-[#6e6e73]';
       });
 
-      const items = state.reviews.filter(r => {
+      const baseItems = state.reviews.filter(r => {
         if (state.reviewFilter === 'done') return r.status === 'done';
         if (state.reviewFilter === 'upcoming') return r.status === 'pending' && r.nextReviewDate > TODAY;
         if (state.reviewFilter === 'due') return r.status === 'pending' && r.nextReviewDate <= TODAY;
         return r.status === state.reviewFilter;
       });
+
+      // Render Subject Filter Chips
+      const subBar = document.getElementById('reviewSubjectFilterBar');
+      if (subBar) {
+        const counts = {};
+        baseItems.forEach(r => { counts[r.subjectId] = (counts[r.subjectId] || 0) + 1; });
+        const subs = getAllSubjects().filter(sub => counts[sub.id] > 0 || reviewSubjectFilter === sub.id);
+        subBar.innerHTML = [
+          `<button type="button" data-review-sub-filter="all" class="px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${reviewSubjectFilter === 'all' ? 'bg-[#1d1d1f] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:text-[#1d1d1f]'}">전체 ${baseItems.length}</button>`,
+          ...subs.map(sub => {
+            const active = reviewSubjectFilter === sub.id;
+            return `<button type="button" data-review-sub-filter="${escapeHtml(sub.id)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition ${active ? 'bg-[#1d1d1f] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:text-[#1d1d1f]'}"><span class="w-2 h-2 rounded-full" style="background:${sub.color}"></span><span>${escapeHtml(sub.name)} ${counts[sub.id] || 0}</span></button>`;
+          })
+        ].join('');
+      }
+
+      let items = reviewSubjectFilter === 'all'
+        ? [...baseItems]
+        : baseItems.filter(r => r.subjectId === reviewSubjectFilter);
+
+      // Sort chronologically: soonest date first for due/upcoming; newest first for done
+      items.sort((a, b) => {
+        const da = a.nextReviewDate || '';
+        const db = b.nextReviewDate || '';
+        return state.reviewFilter === 'done' ? db.localeCompare(da) : da.localeCompare(db);
+      });
+
       if (items.length === 0) {
-        container.innerHTML = '<p class="text-xs text-[#86868b] py-4">항목이 없습니다.</p>';
+        container.innerHTML = '<div class="rounded-2xl border border-dashed border-black/[0.08] py-12 text-center text-xs text-[#86868b]">해당 조건의 알림·일정이 없습니다.</div>';
         return;
       }
 
-      container.innerHTML = items.map(item => {
-        const sub = getSubject(item.subjectId);
-        const isPending = item.status === 'pending';
-        return `
-          <div class="rounded-xl p-3 space-y-2" style="background:${state.darkMode ? (sub.darkTintBg || sub.tintBg) : sub.tintBg}; border-left: 3px solid ${sub.color};">
-            <div class="flex items-center justify-between">
-              <span class="text-[11px] font-bold flex items-center" style="color:${state.darkMode ? (sub.darkText || sub.text) : sub.text}">${escapeHtml(sub.name)} · ${item.nextReviewDate}${item.isSpaced ? `<span class="inline-flex items-center gap-0.5 ml-1.5" title="에빙하우스 5단계 (${(item.stepIndex || 0) + 1}/5)">${[0,1,2,3,4].map(d => `<span class="w-1.5 h-1.5 rounded-full ${d <= (item.stepIndex || 0) ? 'bg-[#007aff]' : 'bg-black/15'}"></span>`).join('')}</span>` : ''}</span>
-              <div class="flex items-center gap-1.5">
-                <button type="button" data-edit-reminder="${escapeHtml(item.id)}" class="text-[#86868b] hover:text-[#007aff]" aria-label="수정">
+      // Group by YYYY-MM
+      const groups = [];
+      const groupMap = new Map();
+      items.forEach(item => {
+        const ym = (item.nextReviewDate || TODAY).slice(0, 7);
+        if (!groupMap.has(ym)) {
+          const grp = { ym, items: [] };
+          groupMap.set(ym, grp);
+          groups.push(grp);
+        }
+        groupMap.get(ym).items.push(item);
+      });
+
+      // Collapse 3rd+ month automatically on first load when many items exist
+      if (!reviewCollapseInitialized && items.length > 12 && groups.length > 2) {
+        groups.slice(2).forEach(g => collapsedReviewMonths.add(g.ym));
+        reviewCollapseInitialized = true;
+      }
+
+      container.innerHTML = groups.map(grp => {
+        const [y, m] = grp.ym.split('-');
+        const label = `${y}년 ${Number(m)}월`;
+        const isCollapsed = collapsedReviewMonths.has(grp.ym);
+        const rowsHtml = grp.items.map(item => {
+          const sub = getSubject(item.subjectId);
+          const isPending = item.status === 'pending';
+          const cleanMemo = (item.memo && item.memo !== '학원 시간표 연동') ? item.memo : '';
+          const diffDays = item.nextReviewDate ? Math.round((new Date(item.nextReviewDate + 'T00:00:00') - new Date(TODAY + 'T00:00:00')) / 86400000) : null;
+          const dBadge = isPending && diffDays !== null
+            ? (diffDays < 0 ? `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 text-[10px] font-bold">밀림 ${Math.abs(diffDays)}일</span>`
+              : diffDays === 0 ? `<span class="px-1.5 py-0.5 rounded bg-[#007aff]/10 text-[#007aff] text-[10px] font-bold">오늘</span>`
+              : diffDays <= 7 ? `<span class="px-1.5 py-0.5 rounded bg-black/[0.04] text-[#6e6e73] text-[10px] font-semibold">D-${diffDays}</span>` : '')
+            : '';
+
+          return `
+            <div class="px-4 py-3 flex items-center justify-between gap-3 hover:bg-[#f5f5f7]/70 transition">
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                ${isPending ? `
+                  <button type="button" data-complete-review="${escapeHtml(item.id)}" class="w-5 h-5 rounded-full border-2 shrink-0 hover:scale-110 transition flex items-center justify-center" style="border-color:${sub.color}" aria-label="완료 처리"></button>
+                ` : `
+                  <button type="button" data-reopen-review="${escapeHtml(item.id)}" class="w-5 h-5 rounded-full bg-emerald-500 text-white shrink-0 flex items-center justify-center text-[11px] font-bold" aria-label="대기중으로 복원">✓</button>
+                `}
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <p class="text-[13.5px] font-semibold text-[#1d1d1f] truncate ${!isPending ? 'line-through text-[#86868b]' : ''}">${escapeHtml(item.title)}</p>
+                    ${dBadge}
+                  </div>
+                  <div class="flex items-center gap-2 mt-0.5 text-[11px] text-[#86868b] flex-wrap">
+                    <span class="inline-flex items-center gap-1 font-semibold" style="color:${state.darkMode ? (sub.darkText || sub.text) : sub.text}">
+                      <span class="w-1.5 h-1.5 rounded-full" style="background:${sub.color}"></span>
+                      ${escapeHtml(sub.name)}
+                    </span>
+                    <span class="tabular-nums">${formatKoShortDate(item.nextReviewDate)}</span>
+                    ${item.isSpaced ? `<span class="text-[#007aff] font-medium">· 에빙하우스 ${(item.stepIndex || 0) + 1}/5</span>` : ''}
+                    ${cleanMemo ? `<span class="truncate max-w-[220px]">· ${escapeHtml(cleanMemo)}</span>` : ''}
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                ${isPending ? `<button type="button" data-snooze-review="${escapeHtml(item.id)}" class="px-2 py-1 rounded-lg bg-[#f5f5f7] hover:bg-black/[0.08] text-[11px] font-semibold text-[#6e6e73] transition">+3일</button>` : ''}
+                <button type="button" data-edit-reminder="${escapeHtml(item.id)}" class="w-7 h-7 rounded-lg hover:bg-black/[0.05] text-[#86868b] hover:text-[#007aff] flex items-center justify-center transition" aria-label="수정">
                   <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                 </button>
-                <button type="button" data-delete-review="${escapeHtml(item.id)}" class="text-[#86868b] hover:text-rose-500" aria-label="삭제">
+                <button type="button" data-delete-review="${escapeHtml(item.id)}" class="w-7 h-7 rounded-lg hover:bg-rose-50 text-[#86868b] hover:text-rose-500 flex items-center justify-center transition" aria-label="삭제">
                   <i data-lucide="x" class="w-3.5 h-3.5"></i>
                 </button>
               </div>
             </div>
-            <p class="text-xs font-semibold text-[#1d1d1f] ${!isPending ? 'line-through text-[#86868b]' : ''}">${escapeHtml(item.title)}</p>
-            ${item.memo ? `<p class="text-[11px] text-[#6e6e73]">${escapeHtml(item.memo)}</p>` : ''}
-            ${isPending ? `
-              <div class="flex gap-1.5 pt-0.5">
-                <button type="button" data-complete-review="${escapeHtml(item.id)}" class="flex-1 py-1 rounded-lg bg-[#1d1d1f] text-white text-[11px] font-semibold">완료</button>
-                <button type="button" data-snooze-review="${escapeHtml(item.id)}" class="px-2.5 py-1 rounded-lg bg-white/80 text-[#6e6e73] text-[11px] font-semibold">+3일</button>
+          `;
+        }).join('');
+
+        return `
+          <div class="rounded-2xl border border-black/[0.07] bg-white overflow-hidden">
+            <button type="button" data-toggle-review-month="${grp.ym}" class="w-full px-4 py-2.5 bg-[#fbfbfd] border-b border-black/[0.05] flex items-center justify-between text-left hover:bg-[#f5f5f7] transition">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-[#1d1d1f]">${label}</span>
+                <span class="px-2 py-0.5 rounded-full bg-black/[0.05] text-[10.5px] font-bold tabular-nums text-[#6e6e73]">${grp.items.length}건</span>
               </div>
-            ` : `
-              <button type="button" data-reopen-review="${escapeHtml(item.id)}" class="w-full py-1 rounded-lg bg-white/80 text-[#6e6e73] text-[11px] font-semibold">다시 대기중으로</button>
-            `}
+              <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4 text-[#86868b]"></i>
+            </button>
+            <div class="${isCollapsed ? 'hidden' : 'divide-y divide-black/[0.05]'}">
+              ${rowsHtml}
+            </div>
           </div>
         `;
       }).join('');
@@ -4132,6 +4230,22 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
       document.getElementById('btnCloseLogModal').addEventListener('click', () => document.getElementById('logModal').classList.add('hidden'));
 
       document.body.addEventListener('click', e => {
+        const revSubBtn = e.target.closest('[data-review-sub-filter]');
+        if (revSubBtn) {
+          reviewSubjectFilter = revSubBtn.dataset.reviewSubFilter;
+          renderReviewView();
+          if (window.lucide) window.lucide.createIcons();
+          return;
+        }
+        const revMonthBtn = e.target.closest('[data-toggle-review-month]');
+        if (revMonthBtn) {
+          const ym = revMonthBtn.dataset.toggleReviewMonth;
+          if (collapsedReviewMonths.has(ym)) collapsedReviewMonths.delete(ym);
+          else collapsedReviewMonths.add(ym);
+          renderReviewView();
+          if (window.lucide) window.lucide.createIcons();
+          return;
+        }
         const delMock = e.target.closest('[data-delete-mock]');
         if (delMock) {
           state.mockExams = (state.mockExams || []).filter(m => m.id !== delMock.dataset.deleteMock);
