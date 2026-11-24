@@ -173,6 +173,9 @@
       <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <!-- LEFT COLUMN (3 cols): Subject Communities & Quick Filters -->
         <aside class="lg:col-span-3 space-y-5 lg:sticky lg:top-20">
+          <!-- Korean Mini Calendar (Sun/Holiday Red, Sat Blue) -->
+          <div id="homeMiniCalBox" class="rounded-2xl border border-black/[0.06] bg-white p-3.5 space-y-2.5"></div>
+
           <div class="space-y-1">
             <p class="px-2.5 text-[10.5px] font-bold uppercase tracking-wider text-[#86868b] mb-2">과목 토픽</p>
             <div id="homeTopicList" class="flex lg:flex-col gap-1 overflow-x-auto pb-1 lg:pb-0"></div>
@@ -204,18 +207,14 @@
           <!-- Subject Hub Banner (Visible when a specific subject topic is selected) -->
           <div id="homeSubjectHub" class="hidden rounded-2xl border border-black/[0.07] bg-white p-4 space-y-3"></div>
 
-          <!-- Quiz Wrong Answers Card in Home Center -->
-          <div id="homeWrongAnswersBox" class="hidden space-y-2.5"></div>
-
-          <!-- Quick Post Trigger Bar -->
-          <div class="flex items-center gap-2.5 p-2.5 rounded-2xl bg-[#f5f5f7]">
-            <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-xs font-bold text-[#1d1d1f] shadow-2xs shrink-0">🐼</div>
-            <button type="button" id="btnHomeQuickPost" class="flex-1 text-left px-3.5 py-2 rounded-xl bg-white hover:bg-white/90 text-xs text-[#86868b] font-medium transition shadow-2xs">
-              방금 끝낸 공부나 한 줄 회고 남기기...
-            </button>
-            <button type="button" id="btnHomeQuickCapture" class="px-3 py-2 rounded-xl bg-[#007aff] hover:bg-[#0066d6] text-white text-xs font-semibold shrink-0 transition">
-              열품타
-            </button>
+          <!-- Quick One-Line Memo / Freeboard Bar (Not a duplicate + modal) -->
+          <div class="space-y-2">
+            <form id="homeQuickMemoForm" class="flex items-center gap-2 p-2 rounded-2xl bg-[#f5f5f7]">
+              <input id="homeQuickMemoInput" type="text" placeholder="오늘의 한 줄 메모·다짐·암기 포인트 남기기..." class="flex-1 min-w-0 px-3.5 py-2 rounded-xl bg-white text-xs font-medium text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#007aff]" />
+              <button type="submit" class="px-3 py-2 rounded-xl bg-[#1d1d1f] hover:bg-black text-white text-xs font-semibold shrink-0 transition">남기기</button>
+              <button type="button" id="btnHomeQuickCapture" class="px-3 py-2 rounded-xl bg-[#007aff] hover:bg-[#0066d6] text-white text-xs font-semibold shrink-0 transition">열품타</button>
+            </form>
+            <div id="homeQuickMemoList" class="hidden space-y-1.5"></div>
           </div>
 
           <!-- Sort Bar -->
@@ -223,6 +222,11 @@
             <div class="flex items-center gap-1.5">
               <button type="button" data-feed-sort="recent" class="feed-sort-btn px-3 py-1 rounded-full text-xs font-semibold bg-[#1d1d1f] text-white">최신순</button>
               <button type="button" data-feed-sort="duration" class="feed-sort-btn px-3 py-1 rounded-full text-xs font-medium bg-black/[0.05] text-[#6e6e73]">공부시간순</button>
+              <button type="button" data-feed-sort="wrong" class="feed-sort-btn relative px-3 py-1 rounded-full text-xs font-medium bg-black/[0.05] text-[#6e6e73] inline-flex items-center gap-1.5">
+                <span>오답노트</span>
+                <span id="homeWrongCountBadge" class="hidden text-[10px] font-bold tabular-nums opacity-80"></span>
+                <span id="homeWrongRedDot" class="hidden w-1.5 h-1.5 rounded-full bg-[#ff3b30]"></span>
+              </button>
             </div>
             <span id="homeFeedCount" class="text-[11px] font-medium text-[#86868b] tabular-nums">0개의 기록</span>
           </div>
@@ -2474,7 +2478,89 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
     let homeFeedFilter = 'all';
     let homeFeedSort = 'recent';
 
+    const KR_HOLIDAYS = {
+      '2026-01-01': '신정', '2026-02-16': '설날 연휴', '2026-02-17': '설날', '2026-02-18': '설날 연휴',
+      '2026-03-01': '삼일절', '2026-03-02': '대체공휴일', '2026-05-05': '어린이날', '2026-05-24': '부처님오신날',
+      '2026-05-25': '대체공휴일', '2026-06-06': '현충일', '2026-07-17': '제헌절', '2026-08-15': '광복절',
+      '2026-08-17': '대체공휴일', '2026-09-24': '추석 연휴', '2026-09-25': '추석', '2026-09-26': '추석 연휴',
+      '2026-10-03': '개천절', '2026-10-05': '대체공휴일', '2026-10-09': '한글날', '2026-12-25': '성탄절',
+      '2027-01-01': '신정', '2027-02-06': '설날 연휴', '2027-02-07': '설날', '2027-02-08': '설날 연휴', '2027-02-09': '대체공휴일',
+      '2027-03-01': '삼일절', '2027-05-05': '어린이날', '2027-05-13': '부처님오신날', '2027-06-06': '현충일',
+      '2027-07-17': '제헌절', '2027-08-15': '광복절', '2027-08-16': '대체공휴일', '2027-09-14': '추석 연휴',
+      '2027-09-15': '추석', '2027-09-16': '추석 연휴', '2027-10-03': '개천절', '2027-10-04': '대체공휴일',
+      '2027-10-09': '한글날', '2027-10-11': '대체공휴일', '2027-12-25': '성탄절'
+    };
+    let miniCalYear = new Date().getFullYear();
+    let miniCalMonth = new Date().getMonth();
+
+    function renderHomeMiniCalendar() {
+      const box = document.getElementById('homeMiniCalBox');
+      if (!box) return;
+      const firstDay = new Date(miniCalYear, miniCalMonth, 1).getDay(); // 0=Sun
+      const daysInMonth = new Date(miniCalYear, miniCalMonth + 1, 0).getDate();
+      const logDates = new Set((state.logs || []).map(l => l.date));
+      const remDates = new Set((state.reviews || []).filter(r => r.status === 'pending').map(r => r.nextReviewDate));
+
+      const cells = [];
+      for (let i = 0; i < firstDay; i++) cells.push('<div></div>');
+      for (let d = 1; d <= daysInMonth; d++) {
+        const dStr = `${miniCalYear}-${String(miniCalMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const dow = (firstDay + d - 1) % 7;
+        const isHoliday = !!KR_HOLIDAYS[dStr];
+        const isToday = dStr === TODAY;
+        const hasLog = logDates.has(dStr);
+        const hasRem = remDates.has(dStr);
+        let colorCls = 'text-[#1d1d1f]';
+        if (dow === 0 || isHoliday) colorCls = 'text-[#ff3b30]';
+        else if (dow === 6) colorCls = 'text-[#007aff]';
+
+        cells.push(`
+          <button type="button" data-mini-cal-date="${dStr}" title="${isHoliday ? KR_HOLIDAYS[dStr] : dStr}" class="relative h-7 rounded-lg flex flex-col items-center justify-center text-[11px] font-semibold tabular-nums transition ${isToday ? 'bg-[#1d1d1f] text-white' : `hover:bg-black/[0.05] ${colorCls}`}">
+            <span>${d}</span>
+            ${(hasLog || hasRem) ? `<span class="w-1 h-1 rounded-full ${isToday ? 'bg-white' : (hasLog ? 'bg-[#007aff]' : 'bg-amber-500')} -mt-0.5"></span>` : ''}
+          </button>
+        `);
+      }
+
+      box.innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-[#1d1d1f] tabular-nums">${miniCalYear}년 ${miniCalMonth + 1}월</span>
+          <div class="flex items-center gap-0.5">
+            <button type="button" id="btnMiniCalPrev" class="w-6 h-6 rounded-md hover:bg-black/[0.05] flex items-center justify-center text-[#6e6e73]" aria-label="이전 달">‹</button>
+            <button type="button" id="btnMiniCalNext" class="w-6 h-6 rounded-md hover:bg-black/[0.05] flex items-center justify-center text-[#6e6e73]" aria-label="다음 달">›</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-7 text-center text-[10px] font-bold">
+          <div class="text-[#ff3b30]">일</div><div class="text-[#86868b]">월</div><div class="text-[#86868b]">화</div><div class="text-[#86868b]">수</div><div class="text-[#86868b]">목</div><div class="text-[#86868b]">금</div><div class="text-[#007aff]">토</div>
+        </div>
+        <div class="grid grid-cols-7 gap-y-0.5">${cells.join('')}</div>
+      `;
+    }
+
+    function renderQuickMemos() {
+      const box = document.getElementById('homeQuickMemoList');
+      if (!box) return;
+      const memos = state.quickMemos || [];
+      if (memos.length === 0) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+      }
+      box.classList.remove('hidden');
+      box.innerHTML = memos.slice(0, 4).map(m => `
+        <div class="flex items-center justify-between gap-2 px-3.5 py-2 rounded-xl bg-[#f5f5f7] text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="text-[10.5px] font-semibold text-[#86868b] shrink-0 tabular-nums">${m.date.slice(5)}</span>
+            <p class="text-[#1d1d1f] font-medium truncate">${escapeHtml(m.text)}</p>
+          </div>
+          <button type="button" data-delete-memo="${escapeHtml(m.id)}" class="text-[#86868b] hover:text-rose-500 text-xs shrink-0" aria-label="메모 삭제">✕</button>
+        </div>
+      `).join('');
+    }
+
     function renderHome() {
+      renderHomeMiniCalendar();
+      renderQuickMemos();
       const dueItems = state.reviews.filter(r => r.status === 'pending' && r.nextReviewDate <= TODAY);
       const upcomingItems = state.reviews.filter(r => r.status === 'pending' && r.nextReviewDate > TODAY);
       const lastConfused = state.logs.find(l => l.level <= 2);
@@ -2582,19 +2668,55 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
       }
 
 
-      const wrongItems = state.reviews.filter(r => r.status === 'pending' && (r.isQuizWrong || String(r.title || '').startsWith('[문제풀이') || String(r.title || '').startsWith('[미니테스트')));
-      const wrongBox = document.getElementById('homeWrongAnswersBox');
-      if (wrongBox) {
-        if (wrongItems.length === 0) {
-          wrongBox.classList.add('hidden');
+      const allWrongItems = state.reviews.filter(r => r.status === 'pending' && (r.isQuizWrong || String(r.title || '').startsWith('[문제풀이') || String(r.title || '').startsWith('[미니테스트')));
+      const wrongDot = document.getElementById('homeWrongRedDot');
+      const wrongBadge = document.getElementById('homeWrongCountBadge');
+      if (wrongDot) wrongDot.classList.toggle('hidden', allWrongItems.length === 0);
+      if (wrongBadge) {
+        wrongBadge.classList.toggle('hidden', allWrongItems.length === 0);
+        wrongBadge.textContent = allWrongItems.length > 0 ? `${allWrongItems.length}` : '';
+      }
+
+      if (homeFeedSort === 'wrong') {
+        const filteredWrong = homeTopicFilter === 'all'
+          ? allWrongItems
+          : allWrongItems.filter(w => w.subjectId === homeTopicFilter);
+        document.getElementById('homeFeedCount').textContent = `미복습 오답 ${filteredWrong.length}건`;
+        const feedBox = document.getElementById('homeRedditFeed');
+        if (filteredWrong.length === 0) {
+          feedBox.innerHTML = `
+            <div class="rounded-2xl border border-dashed border-black/10 p-8 text-center space-y-2">
+              <p class="text-xs text-[#86868b]">미복습 오답이 없습니다. 완벽해요!</p>
+              <button type="button" id="btnGoQuizFromHome" class="text-xs font-semibold text-[#007aff] hover:underline">문제풀이로 가기</button>
+            </div>
+          `;
         } else {
-          wrongBox.classList.remove('hidden');
-          const cards = wrongItems.slice(0, 5).map(w => {
+          const cards = filteredWrong.map(w => {
             const sub = getSubject(w.subjectId);
             const qText = w.fullQuestion || w.title;
             const ansInfo = (w.answerNum) ? `내 답: ${w.chosenNum || '미선택'} / 정답: ${w.answerNum}번` : '';
+            let choices = Array.isArray(w.choices) && w.choices.length > 0 ? w.choices : null;
+            let choiceNotes = w.choiceNotes || '';
+            if (!choices && Array.isArray(state.savedMiniTests)) {
+              for (const t of state.savedMiniTests) {
+                const found = (t.items || []).find(it => it.question && qText && it.question.trim() === qText.trim());
+                if (found) {
+                  choices = found.choices || null;
+                  if (!choiceNotes) choiceNotes = found.choiceNotes || '';
+                  break;
+                }
+              }
+            }
+            const choicesHtml = choices ? choices.map((ch, ci) => {
+              const isAns = w.answerNum && (ci + 1) === Number(w.answerNum);
+              const isMine = w.chosenNum && (ci + 1) === Number(w.chosenNum);
+              const cls = isAns
+                ? 'bg-emerald-50 border border-emerald-300/70 text-emerald-900 font-semibold'
+                : (isMine ? 'bg-rose-100/70 border border-rose-300/70 text-rose-900' : 'bg-white/80 text-[#1d1d1f]');
+              return `<div class="px-2.5 py-1.5 rounded-lg text-[11.5px] leading-snug ${cls}">${escapeHtml(ch)}${isAns ? ' <span class="text-emerald-600 font-bold">(정답)</span>' : (isMine ? ' <span class="text-rose-600 font-bold">(내 답)</span>' : '')}</div>`;
+            }).join('') : '';
             return `
-              <div class="rounded-2xl border border-rose-200/80 bg-rose-50/40 p-3.5 space-y-1.5">
+              <div class="rounded-2xl border border-rose-200/80 bg-rose-50/40 p-4 space-y-2">
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex items-center gap-1.5">
                     <span class="px-2 py-0.5 rounded-md text-[10.5px] font-bold" style="background:${state.darkMode ? (sub.darkTintBg || sub.tintBg) : sub.tintBg}; color:${state.darkMode ? (sub.darkText || sub.text) : sub.text}">${escapeHtml(sub.name)}</span>
@@ -2603,20 +2725,30 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
                   <button type="button" data-toggle-reminder="${escapeHtml(w.id)}" class="px-2.5 py-1 rounded-full bg-white hover:bg-[#1d1d1f] hover:text-white text-[10.5px] font-semibold text-[#1d1d1f] shadow-2xs transition">복습 완료 ✓</button>
                 </div>
                 <p class="text-xs font-semibold text-[#1d1d1f] leading-relaxed">${escapeHtml(qText)}</p>
-                ${w.memo ? `<p class="text-[11.5px] text-[#007aff] font-medium leading-snug">${escapeHtml(w.memo)}</p>` : ''}
+                ${(choicesHtml || choiceNotes) ? `
+                  <details class="group">
+                    <summary class="inline-flex items-center gap-1 text-[11px] font-semibold text-[#007aff] cursor-pointer select-none hover:underline list-none">
+                      <span>선지·상세해설 보기 ▾</span>
+                    </summary>
+                    <div class="mt-2 space-y-1.5">
+                      ${choicesHtml ? `<div class="space-y-1">${choicesHtml}</div>` : ''}
+                      ${w.memo ? `<p class="text-[11.5px] text-[#007aff] font-semibold leading-snug pt-1">${escapeHtml(w.memo)}</p>` : ''}
+                      ${choiceNotes ? `<p class="text-[11.5px] text-[#6e6e73] leading-snug">${escapeHtml(choiceNotes)}</p>` : ''}
+                    </div>
+                  </details>
+                ` : (w.memo ? `<p class="text-[11.5px] text-[#007aff] font-medium leading-snug">${escapeHtml(w.memo)}</p>` : '')}
               </div>
             `;
           }).join('');
-          wrongBox.innerHTML = `
-            <div class="flex items-center justify-between px-1">
-              <h3 class="text-xs font-bold text-rose-600">❌ 미니테스트 오답 노트 (${wrongItems.length}건)</h3>
+          feedBox.innerHTML = `
+            <div class="flex items-center justify-between px-1 pb-1">
+              <span class="text-xs font-bold text-rose-600">❌ 미복습 오답 노트</span>
               <button type="button" id="btnGoQuizFromHome" class="text-[11px] font-semibold text-[#007aff] hover:underline">문제풀이로 가기</button>
             </div>
             ${cards}
           `;
         }
-      }
-
+      } else {
       // Center Column: Filtered & Sorted Reddit-style Post Stream
       let posts = [...state.logs];
       if (homeTopicFilter !== 'all') posts = posts.filter(l => l.subjectId === homeTopicFilter);
@@ -2671,6 +2803,8 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
             </article>
           `;
         }).join('');
+      }
+
       }
 
       // Right Column: Weekly Mini Bars + Reminders
@@ -3656,7 +3790,7 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
       });
 
       document.getElementById('btnHomeAskSam').addEventListener('click', openSamDrawer);
-      document.getElementById('homeWrongAnswersBox').addEventListener('click', e => { if (e.target.closest('#btnGoQuizFromHome')) { switchView('quiz'); if (!currentWideQuiz) loadOrAutoGenerateTodayQuiz(false); } });
+      document.getElementById('homeRedditFeed').addEventListener('click', e => { if (e.target.closest('#btnGoQuizFromHome')) { switchView('quiz'); if (!currentWideQuiz) loadOrAutoGenerateTodayQuiz(false); } });
       document.getElementById('homeSubjectHub').addEventListener('input', e => {
         const pinInp = e.target.closest('[data-pin-subject]');
         if (pinInp) {
@@ -3676,7 +3810,45 @@ BODY: 세법·재무회계·재정학·상법 공부와 연결하거나 시사�
         }
       });
 
-      document.getElementById('btnHomeQuickPost').addEventListener('click', () => openLogModal({ date: TODAY, mode: 'manual' }));
+      document.getElementById('homeQuickMemoForm').addEventListener('submit', e => {
+        e.preventDefault();
+        const inp = document.getElementById('homeQuickMemoInput');
+        const txt = (inp.value || '').trim();
+        if (!txt) return;
+        if (!state.quickMemos) state.quickMemos = [];
+        state.quickMemos.unshift({ id: `qm-${Date.now()}`, date: TODAY, text: txt });
+        inp.value = '';
+        saveState();
+        renderQuickMemos();
+        showToast('한 줄 메모를 남겼습니다.');
+      });
+      document.getElementById('homeQuickMemoList').addEventListener('click', e => {
+        const del = e.target.closest('[data-delete-memo]');
+        if (!del) return;
+        state.quickMemos = (state.quickMemos || []).filter(m => m.id !== del.dataset.deleteMemo);
+        saveState();
+        renderQuickMemos();
+      });
+      document.getElementById('homeMiniCalBox').addEventListener('click', e => {
+        if (e.target.closest('#btnMiniCalPrev')) {
+          miniCalMonth--;
+          if (miniCalMonth < 0) { miniCalMonth = 11; miniCalYear--; }
+          renderHomeMiniCalendar();
+          return;
+        }
+        if (e.target.closest('#btnMiniCalNext')) {
+          miniCalMonth++;
+          if (miniCalMonth > 11) { miniCalMonth = 0; miniCalYear++; }
+          renderHomeMiniCalendar();
+          return;
+        }
+        const dayBtn = e.target.closest('[data-mini-cal-date]');
+        if (dayBtn) {
+          state.selectedDate = dayBtn.dataset.miniCalDate;
+          saveState();
+          switchView('day');
+        }
+      });
       document.getElementById('btnHomeQuickCapture').addEventListener('click', () => openLogModal({ date: TODAY, mode: 'capture' }));
 
       let draggedTopicId = null;
@@ -3908,6 +4080,8 @@ JSON 배열만 출력: [{"subjectId":"fin","subjectName":"재무회계","source"
               subjectId: q.subjectId || 'tax',
               title: `[문제풀이 Day ${state.miniTestDay || 5}] ${q.question.slice(0, 36)}...`,
               fullQuestion: q.question,
+              choices: Array.isArray(q.choices) ? q.choices : [],
+              choiceNotes: q.choiceNotes || '',
               chosenNum: chosen >= 0 ? chosen + 1 : null,
               answerNum: Number(q.answerIndex) + 1,
               memo: q.wakku,
