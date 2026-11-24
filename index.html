@@ -228,7 +228,6 @@
             <form id="homeQuickMemoForm" class="flex items-center gap-2 p-2 rounded-2xl bg-[#f5f5f7]">
               <input id="homeQuickMemoInput" type="text" placeholder="오늘의 한 줄 메모·다짐·암기 포인트 남기기..." class="flex-1 min-w-0 px-3.5 py-2 rounded-xl bg-white text-xs font-medium text-[#1d1d1f] focus:outline-none focus:ring-2 focus:ring-[#007aff]" />
               <button type="submit" class="px-3 py-2 rounded-xl bg-[#1d1d1f] hover:bg-black text-white text-xs font-semibold shrink-0 transition">남기기</button>
-              <button type="button" id="btnHomeQuickCapture" class="px-3 py-2 rounded-xl bg-[#007aff] hover:bg-[#0066d6] text-white text-xs font-semibold shrink-0 transition">열품타</button>
             </form>
             <div id="homeQuickMemoList" class="hidden space-y-1.5"></div>
           </div>
@@ -3925,7 +3924,6 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
           switchView('day');
         }
       });
-      document.getElementById('btnHomeQuickCapture').addEventListener('click', () => openLogModal({ date: TODAY, mode: 'capture' }));
 
       let draggedTopicId = null;
       const topicListEl = document.getElementById('homeTopicList');
