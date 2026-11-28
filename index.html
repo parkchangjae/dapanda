@@ -161,7 +161,7 @@
           <i data-lucide="search" class="w-4 h-4"></i>
         </button>
         <button type="button" id="btnHeaderSettings" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg hover:bg-black/[0.05] flex items-center justify-center text-[#6e6e73] hover:text-[#1d1d1f] transition" title="마이페이지 및 설정" aria-label="마이페이지 및 설정">
-          <i data-lucide="user-circle" class="w-4.5 h-4.5"></i>
+          <i data-lucide="user-circle" class="w-[18px] h-[18px]"></i>
         </button>
       </div>
     </div>
@@ -2297,6 +2297,7 @@ ${CTA_WAKKU_GUIDE}
         btn.innerHTML = isDark
           ? '<i data-lucide="sun" class="w-4 h-4 text-amber-400"></i>'
           : '<i data-lucide="moon" class="w-4 h-4"></i>';
+        if (typeof renderInlineIcons === 'function') renderInlineIcons();
       }
     }
 
@@ -2643,8 +2644,11 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
         svg.setAttribute('stroke-width', '2');
         svg.setAttribute('stroke-linecap', 'round');
         svg.setAttribute('stroke-linejoin', 'round');
-        const cls = el.getAttribute('class') || 'w-4 h-4';
+        const cls = (el.getAttribute('class') || 'w-4 h-4') + ' shrink-0';
         svg.setAttribute('class', cls);
+        const px = cls.includes('w-5') ? '20' : cls.includes('w-[18px]') ? '18' : cls.includes('w-3.5') ? '14' : cls.includes('w-3') ? '12' : '16';
+        svg.setAttribute('width', px);
+        svg.setAttribute('height', px);
         svg.setAttribute('data-lucide-rendered', name);
         svg.innerHTML = paths;
         el.replaceWith(svg);
