@@ -3420,13 +3420,20 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
         return r.status === state.reviewFilter;
       });
 
+      const typeFiltered = reviewTypeFilter === 'all'
+        ? baseItems
+        : baseItems.filter(r => {
+            const t = getReviewType(r);
+            return reviewTypeFilter === 'curve' ? (t === 'wrong' || t === 'curve') : t === reviewTypeFilter;
+          });
+
       // Render Type Filter Chips (전체 | 학원 강의 | 복습곡선)
       const typeBar = document.getElementById('reviewTypeFilterBar');
       if (typeBar) {
         const lecCnt = baseItems.filter(r => getReviewType(r) === 'lecture').length;
         const curveCnt = baseItems.filter(r => ['wrong', 'curve'].includes(getReviewType(r))).length;
         const typeOpts = [
-          { id: 'all', label: `전체 과목 ${typeFiltered.length}` },
+          { id: 'all', label: `전체 ${baseItems.length}` },
           { id: 'lecture', label: `🏫 학원 강의 ${lecCnt}` },
           { id: 'curve', label: `🔁 복습곡선 ${curveCnt}` }
         ];
@@ -3435,13 +3442,6 @@ BODY: 세법·회계·재정학·상법과 연결되는 핵심 요약 2문장`;
           return `<button type="button" data-review-type-filter="${opt.id}" class="px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition ${active ? 'bg-[#007aff] text-white' : 'bg-[#f5f5f7] text-[#6e6e73] hover:text-[#1d1d1f]'}">${opt.label}</button>`;
         }).join('');
       }
-
-      const typeFiltered = reviewTypeFilter === 'all'
-        ? baseItems
-        : baseItems.filter(r => {
-            const t = getReviewType(r);
-            return reviewTypeFilter === 'curve' ? (t === 'wrong' || t === 'curve') : t === reviewTypeFilter;
-          });
 
       // Render Subject Filter Chips
       const subBar = document.getElementById('reviewSubjectFilterBar');
