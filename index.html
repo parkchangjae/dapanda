@@ -713,8 +713,9 @@
             <button type="button" data-flash-sub="tax" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-black/[0.04] text-[#6e6e73] transition">세법</button>
             <button type="button" data-flash-sub="pub" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-black/[0.04] text-[#6e6e73] transition">재정</button>
             <button type="button" data-flash-sub="law" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-black/[0.04] text-[#6e6e73] transition">상법</button>
-            <select id="flashUnitSelect" class="rounded-full border border-black/10 bg-white px-2.5 py-1 text-base sm:text-[11px] font-semibold text-[#1d1d1f] max-w-[180px]"><option value="all">전체 단원 (45단원)</option></select>
+            <select id="flashUnitSelect" class="rounded-full border border-black/10 bg-white px-2.5 py-1 text-base sm:text-[11px] font-semibold text-[#1d1d1f] max-w-[180px]"><option value="all">전체 단원 (52단원)</option></select>
             <button type="button" id="btnFlashDueOnly" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-[#007aff]/10 text-[#007aff] transition">오늘 복습만</button>
+            <button type="button" id="btnFlashWeakOnly" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-600 transition">⚠️ 다시·헷갈림만</button>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <input id="flashAiTopicInput" type="text" placeholder="주제·조문 (비우면 최신 빈출 자동)" class="w-44 sm:w-52 rounded-xl border border-black/10 px-2.5 py-1.5 text-base sm:text-xs bg-white" />
@@ -745,6 +746,7 @@
         </form>
 
         <div id="flashCardStage" class="max-w-2xl mx-auto"></div>
+        <div id="flashHistoryLogBox" class="max-w-2xl mx-auto"></div>
       </div>
     </section>
   </main>
@@ -1260,7 +1262,9 @@
         flashSubFilter: 'all',
         flashUnitFilter: 'all',
         flashDueOnly: true,
+        flashWeakOnly: false,
         flashCardIdx: 0,
+        flashHistory: {},
         customSubjects: [],
         subjectOrder: ['fin', 'cost', 'tax', 'pub', 'law'],
         subjectPins: {},
@@ -1446,6 +1450,7 @@
         const card = ensureFlashcards().find(c => c.id === fid);
         if (card) {
           card.dueDate = days === 0 ? TODAY : addDays(TODAY, days);
+          card.isWeak = days < 3;
           if (days >= 3) card.mastered = (card.mastered || 0) + 1;
           if (days === 0) {
             const all = ensureFlashcards();
@@ -1455,7 +1460,7 @@
               all.push(card);
             }
           }
-          recordFlashProgress();
+          recordFlashProgress(card, days);
           saveState();
           renderHeaderFlashBadge();
         }
@@ -4867,24 +4872,77 @@ JSON 배열만 출력: [{"subjectId":"fin","subjectName":"재무회계","source"
       searchInput.addEventListener('input', () => {
         const q = searchInput.value.trim().toLowerCase();
         if (!q) { searchResults.classList.add('hidden'); return; }
-        const matched = state.logs.filter(l => {
+
+        const logHits = state.logs.filter(l => {
           const sub = getSubject(l.subjectId).name.toLowerCase();
           return sub.includes(q) || (l.content || '').toLowerCase().includes(q) || (l.reflection || '').toLowerCase().includes(q);
+        }).slice(0, 5).map(l => {
+          const sub = getSubject(l.subjectId);
+          return `<button type="button" data-jump-date="${l.date}" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-black/[0.04] flex items-center justify-between gap-2 text-xs">
+            <span class="truncate"><span class="px-1.5 py-0.5 rounded bg-black/[0.05] text-[10px] font-bold mr-1">기록</span><strong>${escapeHtml(sub.name)}</strong> · ${escapeHtml(l.content)}</span>
+            <span class="text-[#86868b] tabular-nums shrink-0">${l.date}</span>
+          </button>`;
         });
+
+        const revHits = state.reviews.filter(r => {
+          const sub = getSubject(r.subjectId).name.toLowerCase();
+          return sub.includes(q) || (r.title || '').toLowerCase().includes(q) || (r.fullQuestion || '').toLowerCase().includes(q) || (r.memo || '').toLowerCase().includes(q);
+        }).slice(0, 5).map(r => {
+          const sub = getSubject(r.subjectId);
+          const isLec = getReviewType(r) === 'lecture';
+          const badge = r.isQuizWrong ? '오답' : (isLec ? '강의' : '알림');
+          const jumpType = r.isQuizWrong ? 'wrong' : 'review';
+          return `<button type="button" data-jump-review-type="${jumpType}" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-black/[0.04] flex items-center justify-between gap-2 text-xs">
+            <span class="truncate"><span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-800 text-[10px] font-bold mr-1">${badge}</span><strong>${escapeHtml(sub.name)}</strong> · ${escapeHtml(r.title || r.fullQuestion || '')}</span>
+            <span class="text-[#86868b] tabular-nums shrink-0">${r.nextReviewDate || ''}</span>
+          </button>`;
+        });
+
+        const fcHits = ensureFlashcards().filter(c => {
+          const sub = getSubject(c.sub).name.toLowerCase();
+          return sub.includes(q) || (c.tag || '').toLowerCase().includes(q) || (c.front || '').toLowerCase().includes(q) || (c.back || '').toLowerCase().includes(q);
+        }).slice(0, 5).map(c => {
+          const sub = getSubject(c.sub);
+          return `<button type="button" data-jump-flash="${escapeHtml(c.id)}" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-black/[0.04] flex items-center justify-between gap-2 text-xs">
+            <span class="truncate"><span class="px-1.5 py-0.5 rounded bg-[#007aff]/10 text-[#007aff] text-[10px] font-bold mr-1">암기</span><strong>${escapeHtml(c.tag || sub.name)}</strong> · ${escapeHtml((c.front || '').replace(/\{\{|\}\}/g, ''))}</span>
+            <span class="text-[#007aff] text-[10px] font-semibold shrink-0">열기 →</span>
+          </button>`;
+        });
+
+        const allHits = [...fcHits, ...revHits, ...logHits];
         searchResults.classList.remove('hidden');
-        searchResults.innerHTML = matched.length === 0
-          ? '<p class="text-xs text-[#86868b] py-1">일치하는 기록이 없습니다.</p>'
-          : matched.slice(0, 8).map(l => {
-              const sub = getSubject(l.subjectId);
-              return `
-                <button type="button" data-jump-date="${l.date}" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-black/[0.04] flex items-center justify-between gap-2 text-xs">
-                  <span class="truncate"><strong>${escapeHtml(sub.name)}</strong> · ${escapeHtml(l.content)}</span>
-                  <span class="text-[#86868b] tabular-nums shrink-0">${l.date} (${formatShortTime(l.durationMinutes)})</span>
-                </button>
-              `;
-            }).join('');
+        searchResults.innerHTML = allHits.length === 0
+          ? '<p class="text-xs text-[#86868b] py-1">일치하는 기록·오답·암기카드가 없습니다.</p>'
+          : allHits.join('');
       });
       searchResults.addEventListener('click', e => {
+        const fcBtn = e.target.closest('[data-jump-flash]');
+        if (fcBtn) {
+          const fid = fcBtn.dataset.jumpFlash;
+          flashSubFilter = 'all';
+          flashUnitFilter = 'all';
+          flashDueOnly = false;
+          flashWeakOnly = false;
+          const idx = ensureFlashcards().findIndex(c => c.id === fid);
+          flashCardIdx = idx >= 0 ? idx : 0;
+          flashRevealed = false;
+          saveFlashNavState();
+          setQuizViewMode('flashcards');
+          switchView('quiz');
+          searchDrawer.classList.add('hidden');
+          return;
+        }
+        const revBtn = e.target.closest('[data-jump-review-type]');
+        if (revBtn) {
+          if (revBtn.dataset.jumpReviewType === 'wrong') {
+            homeFeedSort = 'wrong';
+            switchView('home');
+          } else {
+            switchView('review');
+          }
+          searchDrawer.classList.add('hidden');
+          return;
+        }
         const btn = e.target.closest('[data-jump-date]');
         if (btn) {
           state.selectedDate = btn.dataset.jumpDate;
@@ -5731,13 +5789,15 @@ ${CTA_WAKKU_GUIDE}`;
       { id: 'fin-11', sub: 'fin', name: '법인세회계·오류수정·보고기간후', kw: ['이연법인세', '일시적차이', '오류수정', '회계변경', '보고기간후'] },
       { id: 'fin-12', sub: 'fin', name: '지분법·연결·환율·현금흐름·EPS', kw: ['지분법', '연결', '현금흐름', 'EPS', '주당이익', '환율'] },
 
-      // 원가관리회계 (6단원)
-      { id: 'cost-1', sub: 'cost', name: '개별·활동기준(ABC)', kw: ['개별원가', 'ABC', '활동기준', '배부'] },
-      { id: 'cost-2', sub: 'cost', name: '종합원가(5단계·공손)', kw: ['종합원가', '완성품환산량', '물량흐름', '공손'] },
-      { id: 'cost-3', sub: 'cost', name: '결합원가·보조부문 배분', kw: ['결합원가', '분리점', '부산물', '보조부문', '상호배분'] },
-      { id: 'cost-4', sub: 'cost', name: '표준원가·차이분석', kw: ['표준원가', '소비차이', '능률차이', '조업도차이', 'AQ'] },
-      { id: 'cost-5', sub: 'cost', name: 'CVP·전부/변동원가', kw: ['CVP', '손익분기', '안전한계', '전부원가', '변동원가'] },
-      { id: 'cost-6', sub: 'cost', name: '의사결정·대체가격', kw: ['자가제조', '외부구입', '특별주문', '폐쇄', '대체가격', '증분'] },
+      // 원가관리회계 전 범위 (8단원)
+      { id: 'cost-1', sub: 'cost', name: '개별원가·제조간접원가 배부', kw: ['개별원가', '정상원가', '예정배부', '배부차이'] },
+      { id: 'cost-2', sub: 'cost', name: '활동기준원가계산(ABC)', kw: ['ABC', '활동기준', '원가동인', '과대원가'] },
+      { id: 'cost-3', sub: 'cost', name: '종합원가계산(5단계·선입/평균)', kw: ['종합원가', '완성품환산량', '물량흐름', '선입선출'] },
+      { id: 'cost-4', sub: 'cost', name: '공손·감손·재작업 회계', kw: ['공손', '정상공손', '비정상공손', '감손', '검사시점'] },
+      { id: 'cost-5', sub: 'cost', name: '결합원가·부산물·보조부문 배분', kw: ['결합원가', '분리점', '부산물', '보조부문', '상호배분'] },
+      { id: 'cost-6', sub: 'cost', name: '표준원가·차이분석(3열 와꾸)', kw: ['표준원가', '소비차이', '능률차이', '조업도차이', 'AQ'] },
+      { id: 'cost-7', sub: 'cost', name: '전부/변동원가·CVP 손익분기', kw: ['CVP', '손익분기', '안전한계', '전부원가', '변동원가'] },
+      { id: 'cost-8', sub: 'cost', name: '단기의사결정·대체가격·자본예산', kw: ['자가제조', '외부구입', '특별주문', '폐쇄', '대체가격', '자본예산'] },
 
       // 세법 전 범위 (14단원)
       { id: 'tax-1', sub: 'tax', name: '국세기본법(제척·소멸·수정·불복)', kw: ['국세기본', '제척기간', '소멸시효', '경정청구', '수정신고', '심판청구'] },
@@ -5755,10 +5815,15 @@ ${CTA_WAKKU_GUIDE}`;
       { id: 'tax-13', sub: 'tax', name: '소득세(과표·세액공제·신고납부)', kw: ['인적공제', '자녀세액공제', '중간예납', '성실신고'] },
       { id: 'tax-14', sub: 'tax', name: '소득세(양도소득세·1세대1주택)', kw: ['양도소득', '장특공제', '1세대 1주택', '양도차손', '이월과세'] },
 
-      // 재정학 (3단원)
-      { id: 'pub-1', sub: 'pub', name: '공공재·외부성·시장실패', kw: ['공공재', '사뮤엘슨', '린달', '외부성', '피구세', '코즈'] },
-      { id: 'pub-2', sub: 'pub', name: '조세이론·귀착·초과부담', kw: ['조세귀착', '초과부담', '정액세', '물품세', '램지', '탄력성'] },
-      { id: 'pub-3', sub: 'pub', name: '소득분배·사회보험·비용편익', kw: ['소득분배', '지니', '국민연금', '비용편익', 'NPV'] },
+      // 재정학 전 범위 (8단원)
+      { id: 'pub-1', sub: 'pub', name: '후생경제·시장실패·공공재(사뮤엘슨)', kw: ['후생경제', '공공재', '사뮤엘슨', '린달', '무임승차'] },
+      { id: 'pub-2', sub: 'pub', name: '외부성(피구·코즈)·공공선택이론', kw: ['외부성', '피구세', '코즈', '공공선택', '중위투표자', '애로우'] },
+      { id: 'pub-3', sub: 'pub', name: '비용편익분석(NPV·B/C·할인율)', kw: ['비용편익', 'NPV', 'B/C', '내부수익률', '할인율'] },
+      { id: 'pub-4', sub: 'pub', name: '조세총론·조세귀착(탄력성)', kw: ['조세귀착', '탄력성', '전가', '라퍼곡선', '조세원칙'] },
+      { id: 'pub-5', sub: 'pub', name: '초과부담(DWL)·최적조세(램지)', kw: ['초과부담', '정액세', '물품세', '램지', '코렛'] },
+      { id: 'pub-6', sub: 'pub', name: '조세의 경제적 효과(노동·저축·투자)', kw: ['노동공급', '저축', '이중과세', '법인세', '조세회피'] },
+      { id: 'pub-7', sub: 'pub', name: '소득분배지표(로렌츠·지니·앳킨슨)', kw: ['소득분배', '지니', '로렌츠', '앳킨슨', '부의 소득세'] },
+      { id: 'pub-8', sub: 'pub', name: '사회보험·공공요금·지방재정·국채', kw: ['국민연금', '부과방식', '공공요금', '지방재정', '티부', '리카도'] },
 
       // 상법 회사편 전 범위 — 2027 하영태 상법강의 목차 반영 (10단원)
       { id: 'law-1', sub: 'law', name: '상법(회사법통칙·법인격부인·해산청산)', kw: ['법인격부인', '1인회사', '해산명령', '청산', '회사의 능력'] },
@@ -5889,20 +5954,23 @@ ${CTA_WAKKU_GUIDE}`;
       { id: 'fc-23', sub: 'fin', unitId: 'fin-12', tag: 'K-IFRS 제1028호 · 지분법', front: '지분법 적용 시 피투자자가 {{배당}}을 선언하면 지분율만큼 {{관계기업투자주식}}에서 차감하고, 내부거래 미실현손익은 {{지분율}}만큼 제거한다.', back: '종속기업(연결)에서는 내부거래 미실현손익을 100% 제거하되, 상향거래 제거분은 지배기업과 비지배지분에 지분율대로 배분한다.' },
       { id: 'fc-24', sub: 'fin', unitId: 'fin-12', tag: 'K-IFRS 제1033호 · 주당이익(EPS)', front: '희석EPS 계산 시 잠재적보통주는 {{주당 증분이익}}이 가장 {{작은}} 순서대로(희석효과가 큰 순) 포함해 반희석 전까지만 반영한다.', back: '현금흐름표 간접법에서 유형자산 처분이익은 비현금수익이므로 영업활동 현금흐름 계산 시 당기순이익에서 차감한다.' },
 
-      // ==================== 원가관리회계 (6단원 × 2 = 12장) ====================
-      { id: 'fc-25', sub: 'cost', unitId: 'cost-1', tag: '원가 · 개별원가 배부차이', front: '제조간접원가 배부차이가 중요하지 않으면 {{매출원가}}에서 전액 조정하고, 중요하면 {{기말재공품·기말제품·매출원가}}에 비례배분한다.', back: '정상원가계산에서 예정배부액 = 예정배부율 × 실제조업도. 배부차이 = 실제발생액 − 예정배부액.' },
-      { id: 'fc-26', sub: 'cost', unitId: 'cost-1', tag: '원가 · 활동기준원가(ABC)', front: 'ABC는 원가동인별로 활동원가를 배부해 소량·고복잡 제품의 {{과소원가계산}}과 대량·단순 제품의 {{과대원가계산}} 왜곡을 줄인다.', back: '전통적 원가계산은 조업도 비례 기준만 써서 대량 제품에 원가가 과다 배부되는 경향이 있다.' },
-      { id: 'fc-27', sub: 'cost', unitId: 'cost-2', tag: '원가 · 종합원가 5단계', front: '종합원가계산에서 {{선입선출법}}은 당기 작업분만 환산량에 포함하고, {{평균법}}은 기초재공품 전량과 당기 투입분을 합쳐 완성품환산량을 구한다.', back: '기초재공품 완성도가 검사시점을 이미 지났으면 선입선출법에서 기초재공품에는 정상공손을 배부하지 않는다.' },
-      { id: 'fc-28', sub: 'cost', unitId: 'cost-2', tag: '원가 · 공손회계', front: '정상공손원가는 {{합격품}} 원가에 가산해 {{제조원가}}로 처리하고, 비정상공손원가는 발생 기간의 {{영업외비용(당기비용)}}으로 처리한다.', back: '검사시점을 통과한 기말재공품이 있으면 정상공손원가를 완성품과 기말재공품에 합격품 수량 비율로 안분한다.' },
-      { id: 'fc-29', sub: 'cost', unitId: 'cost-3', tag: '원가 · 결합원가 배분', front: '추가가공 후 순실현가치법(NRV)에서 결합원가 배분 기준은 {{최종판매가치 − 추가가공원가}}이며, 부산물 순실현가치는 결합원가에서 {{차감}}한다.', back: '추가강공 의사결정은 결합원가(매몰원가)를 무시하고 (추가가공 후 판매가 − 분리점 판매가) vs 추가가공원가만 비교!' },
-      { id: 'fc-30', sub: 'cost', unitId: 'cost-3', tag: '원가 · 보조부문 배분', front: '보조부문 간 용역 수수를 완전히 반영하는 방법은 {{상호배분법}}이며, {{단계배분법}}은 배분 순서에 따라 결과가 달라진다.', back: '직접배분법은 보조부문 간 용역 수수를 전혀 무시하고 제조부문으로만 배부한다.' },
-      { id: 'fc-31', sub: 'cost', unitId: 'cost-4', tag: '원가 · 표준원가 3열 와꾸', front: '변동원가 차이분석 기본 3열은 {{AQ×AP}} | {{AQ×SP}} | {{SQ×SP}}이며, 직접재료 구입·사용시점이 다르면 맨 왼쪽에 {{AQp×AP}}와 {{AQp×SP}}를 분리한다.', back: '왼쪽이 크면 불리한 차이(U), 오른쪽이 크면 유리한 차이(F). 고정제조간접원가는 실제 | 예산 | SQ×SP(배부액)로 별도 구분!' },
-      { id: 'fc-32', sub: 'cost', unitId: 'cost-4', tag: '원가 · 고정제조간접원가 차이', front: '고정제조간접원가 {{예산차이}} = 실제발생액 − 고정예산이고, {{조업도차이}} = 고정예산 − 표준배부액(SQ×SP)이다.', back: '변동원가에는 조업도차이가 없고 소비차이·능률차이만 존재! 고정원가에는 능률차이가 없다.' },
-      { id: 'fc-33', sub: 'cost', unitId: 'cost-5', tag: '원가 · 전부 vs 변동원가', front: '전부원가 영업이익 − 변동원가 영업이익 = ({{기말재고수량}} − {{기초재고수량}}) × {{단위당 고정제조간접원가}}', back: '생산량 > 판매량(재고 증가)이면 고정제조간접원가가 기말재고 자산으로 이연되어 전부원가 이익이 더 크다.' },
-      { id: 'fc-34', sub: 'cost', unitId: 'cost-5', tag: '원가 · CVP 손익분기점', front: '손익분기점(BEP) 매출액 = {{고정원가 ÷ 공헌이익률}}이며, 영업레버리지도(DOL) = {{공헌이익 ÷ 영업이익}}이다.', back: '안전한계율 = 1 ÷ DOL. 법인세가 있을 때 목표세후이익을 달성하려면 세전목표이익 = 세후목표이익 ÷ (1 − t)로 환산!' },
-      { id: 'fc-35', sub: 'cost', unitId: 'cost-6', tag: '원가 · 의사결정 증분분석', front: '유휴생산능력이 없는 상태에서 특별주문을 수락하려면 최소한 {{변동원가 + 기존판매의 공헌이익(기회비용)}} 이상을 받아야 한다.', back: '자가제조 vs 외부구입이나 사업부 폐쇄 의사결정에서는 공통고정원가(배부고정비)가 비관련원가이므로 제외하고 회피가능고정원가만 고려!' },
-      { id: 'fc-36', sub: 'cost', unitId: 'cost-6', tag: '원가 · 대체가격 일반공식', front: '공급사업부 최소 대체가격 = {{단위당 증분원가(변동원가)}} + {{단위당 기회비용(상실된 공헌이익)}}', back: '유휴능력이 충분하면 기회비용이 0이므로 변동원가가 최소 대체가격이 되고, 최대 대체가격은 외부시장 구입가격이다.' },
-
+      // ==================== 원가관리회계 전 범위 (8단원 × 2 = 16장) ====================
+      { id: 'fc-25', sub: 'cost', unitId: 'cost-1', tag: '원가 · 개별원가 예정배부', front: '정상원가계산에서 제조간접원가 예정배부액 = {{예정배부율 × 실제조업도}}이며, 배부차이 = {{실제발생액 − 예정배부액}}이다.', back: '실제발생액이 예정배부액보다 크면 과소배부(불리), 작으면 과대배부(유리)이다.' },
+      { id: 'fc-26', sub: 'cost', unitId: 'cost-1', tag: '원가 · 배부차이 조정', front: '제조간접원가 배부차이가 중요하지 않으면 {{매출원가}}에서 전액 조정하고, 중요하면 {{기말재공품·기말제품·매출원가}}에 비례배분한다.', back: '비례배분 시 총원가 기준 또는 당기배부된 제조간접원가 잔액 기준(원가구성요소법)으로 안분한다.' },
+      { id: 'fc-27', sub: 'cost', unitId: 'cost-2', tag: '원가 · 활동기준원가(ABC)', front: 'ABC는 {{활동}}별로 원가집합을 모아 {{원가동인}}에 따라 배부하므로, 소량·고복잡 제품의 {{과소원가계산}} 왜곡을 줄인다.', back: '단위수준·묶음수준·제품수준·설비유지활동 등 4가지 활동계층으로 구분한다.' },
+      { id: 'fc-28', sub: 'cost', unitId: 'cost-2', tag: '원가 · ABC 도입효과', front: '전통적 원가계산에서는 대량·단순 제품에 제조간접원가가 {{과대배부}}되고, ABC 전환 시 소량·맞춤형 제품의 단위당 원가가 {{상승}}한다.', back: '묶음수준(작업준비 등) 원가는 생산량이 아니라 작업준비 횟수 등에 비례해 발생한다.' },
+      { id: 'fc-29', sub: 'cost', unitId: 'cost-3', tag: '원가 · 종합원가 5단계', front: '종합원가계산에서 {{선입선출법}}은 당기 작업분만 환산량에 포함하고, {{평균법}}은 기초재공품 전량과 당기 투입분을 합쳐 완성품환산량을 구한다.', back: '기초재공품 원가와 당기투입원가가 다를 때, 평균법은 기초와 당기 원가를 섞어 단일 평균단가를 구한다.' },
+      { id: 'fc-30', sub: 'cost', unitId: 'cost-3', tag: '원가 · 전공정원가', front: '연속공정에서 후속공정의 {{전공정원가}}는 공정 착수 시점에 100% 투입된 것으로 보아 완성품환산량 계산 시 완성도를 {{100%}}로 적용한다.', back: '전공정에서 넘어온 물량은 이미 후속공정 시작 시점에 전량 존재하기 때문이다.' },
+      { id: 'fc-31', sub: 'cost', unitId: 'cost-4', tag: '원가 · 공손회계', front: '정상공손원가는 {{합격품}} 원가에 가산해 {{제조원가}}로 처리하고, 비정상공손원가는 발생 기간의 {{영업외비용(당기비용)}}으로 처리한다.', back: '검사시점을 통과한 기말재공품이 있으면 정상공손원가를 완성품과 기말재공품에 합격품 수량 비율로 안분한다.' },
+      { id: 'fc-32', sub: 'cost', unitId: 'cost-4', tag: '원가 · 선입선출 공손배부', front: '기초재공품 완성도가 검사시점을 이미 {{지났으면}}, 선입선출법에서는 기초재공품에 정상공손원가를 배부하지 {{않는다}}.', back: '반대로 기초재공품이 당기에 검사시점을 통과했다면 기초완성분에도 정상공손원가를 배부한다.' },
+      { id: 'fc-33', sub: 'cost', unitId: 'cost-5', tag: '원가 · 결합원가 배분', front: '추가가공 후 순실현가치법(NRV)에서 결합원가 배분 기준은 {{최종판매가치 − 추가가공원가}}이며, 부산물 순실현가치는 결합원가에서 {{차감}}한다.', back: '추가가공 의사결정은 결합원가(매몰원가)를 무시하고 (추가가공 후 판매가 − 분리점 판매가) vs 추가가공원가만 비교!' },
+      { id: 'fc-34', sub: 'cost', unitId: 'cost-5', tag: '원가 · 보조부문 배분', front: '보조부문 간 용역 수수를 완전히 반영하는 방법은 {{상호배분법}}이며, {{단계배분법}}은 배분 순서에 따라 결과가 달라진다.', back: '직접배분법은 보조부문 간 용역 수수를 전혀 무시하고 제조부문으로만 배부한다.' },
+      { id: 'fc-35', sub: 'cost', unitId: 'cost-6', tag: '원가 · 표준원가 3열 와꾸', front: '변동원가 차이분석 기본 3열은 {{AQ×AP}} | {{AQ×SP}} | {{SQ×SP}}이며, 직접재료 구입·사용시점이 다르면 맨 왼쪽에 {{AQp×AP}}와 {{AQp×SP}}를 분리한다.', back: '왼쪽이 크면 불리한 차이(U), 오른쪽이 크면 유리한 차이(F). 고정제조간접원가는 실제 | 예산 | SQ×SP(배부액)로 별도 구분!' },
+      { id: 'fc-36', sub: 'cost', unitId: 'cost-6', tag: '원가 · 고정제조간접원가 차이', front: '고정제조간접원가 {{예산차이}} = 실제발생액 − 고정예산이고, {{조업도차이}} = 고정예산 − 표준배부액(SQ×SP)이다.', back: '변동원가에는 조업도차이가 없고 소비차이·능률차이만 존재! 고정원가에는 능률차이가 없다.' },
+      { id: 'fc-91', sub: 'cost', unitId: 'cost-7', tag: '원가 · 전부 vs 변동원가', front: '전부원가 영업이익 − 변동원가 영업이익 = ({{기말재고수량}} − {{기초재고수량}}) × {{단위당 고정제조간접원가}}', back: '생산량 > 판매량(재고 증가)이면 고정제조간접원가가 기말재고 자산으로 이연되어 전부원가 이익이 더 크다.' },
+      { id: 'fc-92', sub: 'cost', unitId: 'cost-7', tag: '원가 · CVP 손익분기점', front: '손익분기점(BEP) 매출액 = {{고정원가 ÷ 공헌이익률}}이며, 영업레버리지도(DOL) = {{공헌이익 ÷ 영업이익}}이다.', back: '안전한계율 = 1 ÷ DOL. 법인세가 있을 때 목표세후이익을 달성하려면 세전목표이익 = 세후목표이익 ÷ (1 − t)로 환산!' },
+      { id: 'fc-93', sub: 'cost', unitId: 'cost-8', tag: '원가 · 의사결정 증분분석', front: '유휴생산능력이 없는 상태에서 특별주문을 수락하려면 최소한 {{변동원가 + 기존판매의 공헌이익(기회비용)}} 이상을 받아야 한다.', back: '자가제조 vs 외부구입이나 사업부 폐쇄 의사결정에서는 공통고정원가(배부고정비)가 비관련원가이므로 제외하고 회피가능고정원가만 고려!' },
+      { id: 'fc-94', sub: 'cost', unitId: 'cost-8', tag: '원가 · 대체가격·자본예산', front: '공급사업부 최소 대체가격 = {{단위당 증분원가}} + {{단위당 기회비용(상실된 공헌이익)}}이며, 자본예산에서는 감가상각비의 {{법인세절감효과(감가×t)}}를 현금유입에 포함한다.', back: '유휴능력이 충분하면 기회비용이 0이므로 변동원가가 최소 대체가격이 된다.' },
       // ==================== 세법 전 범위 (14단원 × 2 = 28장) ====================
       { id: 'fc-37', sub: 'tax', unitId: 'tax-1', tag: '국세기본법 · 부과제척기간', front: '국세 부과제척기간 원칙은 {{5년}}, 무신고는 {{7년}}, 부정행위(사기·기타 부정)는 {{10년}}(역외거래 부정·무신고는 {{15년}})이다.', back: '소멸시효(5년 / 5억 원 이상 10년)와 헷갈리지 말 것! 부과제척기간은 중단·정지가 없으나 소멸시효는 중단·정지 사유가 있다.' },
       { id: 'fc-38', sub: 'tax', unitId: 'tax-1', tag: '국세기본법 · 경정청구·불복', front: '일반 경정청구는 법정신고기한 경과 후 {{5년}} 이내 가능하며, 이의신청·심사청구·심판청구는 처분 통지를 받은 날부터 {{90일}} 이내 제기한다.', back: '이의신청은 임의적 절차(거치지 않고 바로 심사·심판청구 가능)이나, 행정소송은 반드시 심사청구 또는 심판청구를 거쳐야 한다.' },
@@ -5933,14 +6001,23 @@ ${CTA_WAKKU_GUIDE}`;
       { id: 'fc-63', sub: 'tax', unitId: 'tax-14', tag: '소득세법 · 1세대 1주택 비과세', front: '1세대 1주택 양도소득세 비과세는 보유기간 {{2년}} 이상(조정대상지역 취득 시 거주 2년 추가)이며, 양도가액 {{12억 원}} 초과분은 과세된다.', back: '일시적 2주택 특례: 종전주택 취득 후 1년 이상 지나 신규주택을 취득하고, 신규주택 취득일부터 {{3년}} 이내 종전주택 양도 시 비과세!' },
       { id: 'fc-64', sub: 'tax', unitId: 'tax-14', tag: '소득세법 · 양도차손 통산', front: '양도차손은 같은 그룹(Ⅰ: 부동산·권리·기타자산 / Ⅱ: 주식·파생상품) 내에서 먼저 1차 통산하며, {{그룹 Ⅰ과 Ⅱ 간에는 통산할 수 없다}}.', back: '양도소득 기본공제는 그룹별로 연 250만 원씩 각각 공제!' },
 
-      // ==================== 재정학 (3단원 × 2 = 6장) ====================
+      // ==================== 재정학 전 범위 (8단원 × 2 = 16장) ====================
       { id: 'fc-65', sub: 'pub', unitId: 'pub-1', tag: '재정학 · 공공재 사뮤엘슨 조건', front: '공공재의 파레토 효율 조건(사뮤엘슨 조건)은 모든 소비자의 한계대체율의 합({{ΣMRS}}) = 공공재의 한계변환율({{MRT}})이다.', back: '사적재는 개별 MRS = MRT로 같아야 하지만, 공공재는 비경합성 때문에 수직합(ΣMRS)을 구한다.' },
-      { id: 'fc-66', sub: 'pub', unitId: 'pub-1', tag: '재정학 · 외부성과 코즈 정리', front: '코즈 정리에 따르면 {{재산권}}이 명확히 설정되고 {{거래비용이 0}}이면, 누구에게 재산권을 부여하든 {{자발적 협상}}으로 파레토 효율이 달성된다.', back: '단, 재산권을 누구에게 주느냐에 따라 당사자 간 소득분배 결과는 달라진다!' },
-      { id: 'fc-67', sub: 'pub', unitId: 'pub-2', tag: '재정학 · 조세의 초과부담', front: '특정 재화 물품세의 초과부담(DWL)은 세율의 {{제곱(t²)}}에 비례하고, 수요·공급의 가격탄력성이 {{클수록}} 커진다. {{정액세}}는 초과부담이 0이다.', back: '램지 규칙(역탄력성 법칙): 초과부담을 최소화하려면 수요의 가격탄력성이 작은(비탄력적인) 재화에 더 높은 세율을 부과한다.' },
-      { id: 'fc-68', sub: 'pub', unitId: 'pub-2', tag: '재정학 · 조세귀착 탄력성', front: '조세귀착에서 수요가 완전비탄력적(Ed=0)이면 조세는 전액 {{소비자}}에게 귀착되고, 공급이 탄력적일수록 {{소비자}} 부담이 커진다.', back: '법적 납세의무자가 누구든(수요자 과세 vs 공급자 과세) 경제적 귀착 결과는 동일하다!' },
-      { id: 'fc-69', sub: 'pub', unitId: 'pub-3', tag: '재정학 · 소득분배·사회보험', front: '지니계수는 0(완전평등)에서 1(완전불평등) 사이 값을 가지며, {{로렌츠곡선}}과 대각선 사이 면적이 클수록 불평등도가 {{높다}}.', back: '국민연금 등 공적연금 부과방식은 인구고령화 시 부양비 상승에 취약하고, 적립방식은 인플레이션 위험에 취약하다.' },
-      { id: 'fc-70', sub: 'pub', unitId: 'pub-3', tag: '재정학 · 비용편익분석(CBA)', front: '비용편익분석에서 B/C 비율(편익비용비율)이 {{1}}보다 크거나 순현재가치(NPV)가 {{0}}보다 크면 경제적 타당성이 있다.', back: '상호배타적 사업 선택 시 규모 차이가 있으면 B/C 비율이나 IRR보다 순현재가치(NPV) 기준이 가장 정확하다.' },
-
+      { id: 'fc-66', sub: 'pub', unitId: 'pub-1', tag: '재정학 · 린달 모형·무임승차', front: '린달 균형은 공공재 소비량에 대해 각 개인이 부담할 조세가격 비율을 정해 자발적 합의를 이루는 모형이나, {{무임승차자(Free Rider)}} 문제로 현실 적용이 어렵다.', back: '클라크-그로브스 조세(수요표출기구)는 진실한 선호를 표출하도록 유인을 설계한 메커니즘이다.' },
+      { id: 'fc-67', sub: 'pub', unitId: 'pub-2', tag: '재정학 · 외부성과 코즈 정리', front: '코즈 정리에 따르면 {{재산권}}이 명확히 설정되고 {{거래비용이 0}}이면, 누구에게 재산권을 부여하든 {{자발적 협상}}으로 파레토 효율이 달성된다.', back: '단, 재산권을 누구에게 주느냐에 따라 당사자 간 소득분배 결과는 달라진다! 피구세는 사회적 한계피해(MD)만큼 부과한다.' },
+      { id: 'fc-68', sub: 'pub', unitId: 'pub-2', tag: '재정학 · 공공선택·중위투표자', front: '단순다수결에서 모든 유권자의 선호가 {{단봉선호(Single-peaked)}}일 때 {{중위투표자}}의 선호가 채택되며, 애로우 불가능성 정리는 민주적 사회후생함수 도출의 한계를 보인다.', back: '다봉선호가 존재하면 투표의 역설(순환투표)이 발생할 수 있다.' },
+      { id: 'fc-69', sub: 'pub', unitId: 'pub-3', tag: '재정학 · 비용편익분석(CBA)', front: '비용편익분석에서 B/C 비율이 {{1}}보다 크거나 순현재가치(NPV)가 {{0}}보다 크면 타당성이 있으며, 상호배타적 사업 규모가 다르면 {{NPV}} 기준이 가장 정확하다.', back: '내부수익률(IRR)은 사업 규모 차이를 반영하지 못하고 복수 IRR이 나올 수 있다.' },
+      { id: 'fc-70', sub: 'pub', unitId: 'pub-3', tag: '재정학 · 사회적 할인율', front: '비용편익분석에서 {{사회적 할인율}}이 높을수록 장기적으로 편익이 발생하는 환경·인프라 사업의 현재가치는 {{작아져}} 채택되기 어려워진다.', back: '잠재가격(Shadow Price)은 시장가격이 왜곡되었을 때 사회적 기회비용을 반영해 조정한 가격이다.' },
+      { id: 'fc-95', sub: 'pub', unitId: 'pub-4', tag: '재정학 · 조세귀착 탄력성', front: '조세귀착에서 수요가 완전비탄력적(Ed=0)이면 조세는 전액 {{소비자}}에게 귀착되고, 공급이 탄력적일수록 {{소비자}} 부담이 커진다.', back: '법적 납세의무자가 누구든(수요자 과세 vs 공급자 과세) 경제적 귀착 결과는 동일하다!' },
+      { id: 'fc-96', sub: 'pub', unitId: 'pub-4', tag: '재정학 · 라퍼곡선·하버거 모형', front: '라퍼곡선은 세율이 일정 수준을 넘으면 근로·투자 의욕 저하로 오히려 {{조세수입}}이 감소함을 보이며, 하버거 일반균형 모형은 {{법인세}}의 장기 귀착을 분석한다.', back: '완전경쟁·수확불변 가정 하에서 법인세는 자본과 노동 모두에 귀착될 수 있다.' },
+      { id: 'fc-97', sub: 'pub', unitId: 'pub-5', tag: '재정학 · 조세의 초과부담', front: '특정 재화 물품세의 초과부담(DWL)은 세율의 {{제곱(t²)}}에 비례하고, 수요·공급의 가격탄력성이 {{클수록}} 커진다. {{정액세}}는 초과부담이 0이다.', back: '램지 규칙(역탄력성 법칙): 초과부담을 최소화하려면 수요의 가격탄력성이 작은(비탄력적인) 재화에 더 높은 세율을 부과한다.' },
+      { id: 'fc-98', sub: 'pub', unitId: 'pub-5', tag: '재정학 · 코렛-헤이그 규칙', front: '여가에 과세할 수 없는 현실에서 초과부담을 줄이려면 {{여가}}와 {{보완관계}}에 있는 재화에 더 높은 세율을, 대체재에는 더 낮은 세율을 부과해야 한다.', back: '램지 규칙은 교차탄력성이 0일 때의 특수한 경우이고, 코렛-헤이그 규칙은 여가와의 보완성을 반영한다.' },
+      { id: 'fc-99', sub: 'pub', unitId: 'pub-6', tag: '재정학 · 조세와 노동공급·저축', front: '근로소득세 부과는 임금률을 낮춰 {{대체효과}}로는 노동을 줄이고 {{소득효과}}로는 노동을 늘리므로, 총 노동공급 변화 방향은 {{불확정}}적이다.', back: '이자소득세는 현재소비 대비 미래소비의 가격을 올려 저축을 줄이는 대체효과를 유발(이중과세 논란).' },
+      { id: 'fc-100', sub: 'pub', unitId: 'pub-6', tag: '재정학 · 자본이득세·동결효과', front: '자본이득세를 {{실현 시점}}에 과세하면 세금 납부를 미루기 위해 자산 매각을 회피하는 {{동결효과(Lock-in Effect)}}가 발생한다.', back: '법인세의 이중과세 완화 방법으로는 배당세액공제(Imputation), 지급배당손금산입 등이 있다.' },
+      { id: 'fc-101', sub: 'pub', unitId: 'pub-7', tag: '재정학 · 소득분배지표', front: '지니계수는 0(완전평등)에서 1(완전불평등) 사이 값을 가지며, {{로렌츠곡선}}과 대각선 사이 면적이 클수록 불평등도가 {{높다}}.', back: '앳킨슨 지수는 사회의 불평등 회피도(ε)를 명시적으로 반영하며, 로렌츠곡선이 교차하면 지니계수만으로 우열 판정이 어렵다.' },
+      { id: 'fc-102', sub: 'pub', unitId: 'pub-7', tag: '재정학 · 부의 소득세(NIT)', front: '프리드먼의 부의 소득세는 최저생계비 보장(소득효과)과 한계세율 부과(대체효과)가 모두 {{근로유인}}을 약화시키는 방향으로 작용한다.', back: '근로장려세제(EITC)는 저소득층의 근로소득에 비례해 지원하므로 점증구간에서는 근로유인을 높일 수 있다.' },
+      { id: 'fc-103', sub: 'pub', unitId: 'pub-8', tag: '재정학 · 사회보험·공적연금', front: '공적연금 중 {{부과방식}}은 세대 간 소득재분배가 가능하나 인구고령화에 취약하고, {{적립방식}}은 각 세대가 자신의 노후를 저축하나 인플레이션에 취약하다.', back: '부과방식 내부수익률은 (인구성장률 + 실질임금상승률)에 의존한다(애런의 조건).' },
+      { id: 'fc-104', sub: 'pub', unitId: 'pub-8', tag: '재정학 · 티부·리카도 등가정리', front: '{{티부(Tiebout) 가설}}은 주민의 자유로운 이동(발로 하는 투표)으로 지방공공재의 적정 공급이 달성된다고 보며, {{리카도 등가정리}}는 국채 발행과 증세의 소비효과가 {{동일}}하다고 본다.', back: '리카도 등가정리는 완전한 자본시장·유한수명이 아닌 세대 간 이타적 유산 상속·정액세 등을 가정한다.' },
       // ==================== 상법 회사편 전 범위 — 2027 하영태 목차 반영 (10단원 × 2 = 20장) ====================
       { id: 'fc-71', sub: 'law', unitId: 'law-1', tag: '상법 · 회사법통칙 · 법인격부인론', front: '회사가 채무를 면탈할 목적으로 별개의 회사를 신설해 {{법인격이 형해화}}되거나 {{남용}}된 경우, 채권자는 배후자나 신설회사에 대해 {{책임}}을 물을 수 있다.', back: '1인 회사에서도 1인 주주와 회사는 별개의 법인격이나, 재산·업무 혼용 등으로 형해화 시 법인격부인론이 적용될 수 있다.' },
       { id: 'fc-72', sub: 'law', unitId: 'law-1', tag: '상법 · 해산명령·청산', front: '회사가 정당한 사유 없이 설립 후 {{1년}} 내에 영업을 개시하지 않거나 {{1년}} 이상 영업을 휴지한 때 등에는 법원이 {{해산명령}}을 내릴 수 있다.', back: '해산한 회사는 청산의 목적 범위 내에서만 권리능력이 존속하며, 법정청산인의 제척기간 채권신고 최고는 2월 이상의 기간을 정해 2회 이상 공고한다.' },
@@ -5968,6 +6045,7 @@ ${CTA_WAKKU_GUIDE}`;
     let flashSubFilter = state.flashSubFilter || 'all';
     let flashUnitFilter = state.flashUnitFilter || 'all';
     let flashDueOnly = state.flashDueOnly !== false;
+    let flashWeakOnly = Boolean(state.flashWeakOnly);
     let flashCardIdx = Number(state.flashCardIdx || 0);
     let flashRevealed = false;
 
@@ -5975,6 +6053,7 @@ ${CTA_WAKKU_GUIDE}`;
       state.flashSubFilter = flashSubFilter;
       state.flashUnitFilter = flashUnitFilter;
       state.flashDueOnly = flashDueOnly;
+      state.flashWeakOnly = flashWeakOnly;
       state.flashCardIdx = flashCardIdx;
       saveState();
     }
@@ -6051,12 +6130,89 @@ ${CTA_WAKKU_GUIDE}`;
       return Number(state.flashGoalCount || 0);
     }
 
-    function recordFlashProgress() {
+    function recordFlashProgress(card, days) {
       if (state.flashGoalDate !== TODAY) {
         state.flashGoalDate = TODAY;
         state.flashGoalCount = 0;
       }
       state.flashGoalCount = Number(state.flashGoalCount || 0) + 1;
+
+      if (!state.flashHistory || typeof state.flashHistory !== 'object') state.flashHistory = {};
+      if (!state.flashHistory[TODAY]) {
+        state.flashHistory[TODAY] = { count: 0, perfect: 0, hard: 0, again: 0, firstTag: '', lastTag: '', subs: {}, units: [] };
+      }
+      const h = state.flashHistory[TODAY];
+      h.count = Number(h.count || 0) + 1;
+      if (days >= 3) h.perfect = Number(h.perfect || 0) + 1;
+      else if (days === 1) h.hard = Number(h.hard || 0) + 1;
+      else h.again = Number(h.again || 0) + 1;
+
+      if (card) {
+        const uObj = typeof CTA_UNITS !== 'undefined' ? CTA_UNITS.find(u => u.id === card.unitId) : null;
+        const label = (card.tag || (uObj ? uObj.name : getSubject(card.sub).name)).trim();
+        if (!h.firstTag) h.firstTag = label;
+        h.lastTag = label;
+        if (!h.subs || typeof h.subs !== 'object') h.subs = {};
+        h.subs[card.sub] = (h.subs[card.sub] || 0) + 1;
+        if (uObj) {
+          if (!Array.isArray(h.units)) h.units = [];
+          if (!h.units.includes(uObj.name)) h.units.push(uObj.name);
+        }
+      }
+    }
+
+    function renderFlashHistory() {
+      const box = document.getElementById('flashHistoryLogBox');
+      if (!box) return;
+      const hist = state.flashHistory || {};
+      const dates = Object.keys(hist).sort((a, b) => b.localeCompare(a)).slice(0, 14);
+      if (dates.length === 0) {
+        box.innerHTML = `
+          <div class="rounded-2xl bg-[#fbfbfd] border border-black/[0.06] p-4 text-center text-xs text-[#86868b]">
+            카드를 풀고 평가(다시·헷갈림·완벽)하면 오늘 몇 장을 어디부터 어디까지 봤는지 일별 기록이 자동으로 쌓입니다.
+          </div>
+        `;
+        return;
+      }
+
+      const todayRec = hist[TODAY];
+      const rowsHtml = dates.map(d => {
+        const rec = hist[d] || {};
+        const subBadges = Object.entries(rec.subs || {}).map(([sid, cnt]) => {
+          const s = getSubject(sid);
+          return `<span class="px-1.5 py-0.5 rounded bg-black/[0.04] text-[10px] font-semibold text-[#6e6e73]">${escapeHtml(s.name)} ${cnt}</span>`;
+        }).join('');
+        const rangeTxt = rec.firstTag
+          ? (rec.firstTag === rec.lastTag ? rec.firstTag : `${rec.firstTag} → ${rec.lastTag}`)
+          : '기록됨';
+        const unitsTxt = Array.isArray(rec.units) && rec.units.length > 0
+          ? rec.units.slice(0, 5).join(' · ') + (rec.units.length > 5 ? ` 외 ${rec.units.length - 5}개` : '')
+          : '';
+        return `
+          <div class="px-3.5 py-2.5 rounded-xl bg-[#f5f5f7] space-y-1">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-[#1d1d1f] tabular-nums">${d === TODAY ? '오늘 (' + formatKoShortDate(d) + ')' : formatKoShortDate(d)}</span>
+                <span class="px-2 py-0.5 rounded-full bg-[#007aff]/10 text-[#007aff] text-[10.5px] font-bold tabular-nums">${rec.count || 0}장</span>
+              </div>
+              <span class="text-[10.5px] font-semibold text-[#6e6e73] tabular-nums">완벽 ${rec.perfect || 0} · 헷갈림 ${rec.hard || 0} · 다시 ${rec.again || 0}</span>
+            </div>
+            <p class="text-[11px] font-medium text-[#1d1d1f] truncate">범위: ${escapeHtml(rangeTxt)}</p>
+            ${unitsTxt ? `<p class="text-[10.5px] text-[#86868b] truncate">단원: ${escapeHtml(unitsTxt)}</p>` : ''}
+            ${subBadges ? `<div class="flex flex-wrap gap-1 pt-0.5">${subBadges}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+
+      box.innerHTML = `
+        <div class="rounded-2xl bg-white border border-black/[0.06] p-4 shadow-2xs space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold text-[#1d1d1f]">📅 일별 암기카드 학습 기록 · 범위</h3>
+            ${todayRec ? `<span class="text-[11px] font-semibold text-[#007aff] tabular-nums">오늘 ${todayRec.count}장 완료</span>` : ''}
+          </div>
+          <div class="space-y-2 max-h-64 overflow-y-auto pr-0.5">${rowsHtml}</div>
+        </div>
+      `;
     }
 
     function getDueFlashcardsPool() {
@@ -6138,13 +6294,21 @@ ${CTA_WAKKU_GUIDE}`;
       if (dueBtn) {
         dueBtn.className = `px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${flashDueOnly ? 'bg-[#007aff] text-white' : 'bg-[#007aff]/10 text-[#007aff]'}`;
       }
+      const weakBtn = document.getElementById('btnFlashWeakOnly');
+      if (weakBtn) {
+        const weakCnt = all.filter(c => c.isWeak).length;
+        weakBtn.textContent = `⚠️ 다시·헷갈림만${weakCnt > 0 ? ' ' + weakCnt : ''}`;
+        weakBtn.className = `px-2.5 py-1 rounded-full text-[11px] font-semibold transition ${flashWeakOnly ? 'bg-rose-600 text-white' : 'bg-rose-500/10 text-rose-600'}`;
+      }
 
       const pool = all.filter(c => {
         if (flashSubFilter !== 'all' && c.sub !== flashSubFilter) return false;
         if (flashUnitFilter !== 'all' && c.unitId !== flashUnitFilter) return false;
-        if (flashDueOnly && c.dueDate && c.dueDate > TODAY) return false;
+        if (flashWeakOnly && !c.isWeak) return false;
+        if (flashDueOnly && !flashWeakOnly && c.dueDate && c.dueDate > TODAY) return false;
         return true;
       });
+      renderFlashHistory();
       if (pool.length === 0) {
         stage.innerHTML = `
           <div class="rounded-2xl bg-white border border-black/[0.06] p-8 text-center space-y-3 shadow-2xs">
@@ -6238,6 +6402,13 @@ ${CTA_WAKKU_GUIDE}`;
 
     document.getElementById('flashInputSub')?.addEventListener('change', () => syncFlashUnitOptions());
 
+    document.getElementById('btnFlashWeakOnly')?.addEventListener('click', () => {
+      flashWeakOnly = !flashWeakOnly;
+      flashCardIdx = 0;
+      flashRevealed = false;
+      saveFlashNavState();
+      renderFlashcards();
+    });
     document.getElementById('btnFlashDueOnly')?.addEventListener('click', () => {
       flashDueOnly = !flashDueOnly;
       flashCardIdx = 0;
@@ -6335,6 +6506,7 @@ ${CTA_WAKKU_GUIDE}`;
         const card = pool[flashCardIdx];
         if (card) {
           card.dueDate = days === 0 ? TODAY : addDays(TODAY, days);
+          card.isWeak = days < 3;
           if (days >= 3) card.mastered = (card.mastered || 0) + 1;
           if (days === 0) {
             const idxInAll = all.indexOf(card);
@@ -6343,7 +6515,7 @@ ${CTA_WAKKU_GUIDE}`;
               all.push(card);
             }
           }
-          recordFlashProgress();
+          recordFlashProgress(card, days);
           if (!flashDueOnly) flashCardIdx++;
           saveFlashNavState();
           renderHeaderFlashBadge();
